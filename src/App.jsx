@@ -19,751 +19,689 @@ import ZekaMerkezi from './components/ZekaMerkezi';
 import AIAsistan from './components/AIAsistan';
 import KullaniciYonetimi from './components/KullaniciYonetimi';
 
-function App(){
-  const [user,setUser]=useState(()=>{try{const u=localStorage.getItem('rv_user');return u?JSON.parse(u):null;}catch{return null;}});
-  const [tab,setTab]=useState('dash');
-  const [theme,setTheme]=useState(()=>localStorage.getItem('rv_theme')||'Koyu Okyanus');
-  const [themeModal,setThemeModal]=useState(false);
-  useEffect(()=>{ applyTheme(theme); },[theme]);
-  useEffect(()=>{
-    const close=()=>setNavOpen(null);
-    document.addEventListener('click',close);
-    return()=>document.removeEventListener('click',close);
-  },[]);
-  const [simOcc,setSimOcc]=useState(85);
-  const [simAdr,setSimAdr]=useState(225);
-  const [monthly,setMonthly]=useState(DEFM);
-  const [ac,setAc]=useState(DEFC);
-  const [sbCfg,setSbCfg]=useState({url:(SUPABASE_URL&&SUPABASE_URL.trim())||localStorage.getItem('sb_url')||'',key:(SUPABASE_KEY&&SUPABASE_KEY.trim())||localStorage.getItem('sb_key')||''});
-  const [sbReady,setSbReady]=useState(!!(  (SUPABASE_URL&&SUPABASE_URL.trim()) || localStorage.getItem('sb_url')  ) && !!( (SUPABASE_KEY&&SUPABASE_KEY.trim()) || localStorage.getItem('sb_key') ));
-  const [sbStatus,setSbStatus]=useState('idle'); // idle | connecting | ok | error
-  const [sbModal,setSbModal]=useState(false);
-  const [settingsModal,setSettingsModal]=useState(false);
-  const [groqKey,setGroqKey]=useState('');
-  const [groqSaved,setGroqSaved]=useState(false);
-  const [groqKeyInput,setGroqKeyInput]=useState('');
-  const [dbSync,setDbSync]=useState(false);
-  const [users,setUsers]=useState(()=>{
-    try{
-      const saved=localStorage.getItem('rv_users');
-      if(saved){ const parsed=JSON.parse(saved); if(parsed&&parsed.length>0) return parsed; }
-    }catch(e){}
-    return USERS;
-  });
-  const [userModal,setUserModal]=useState(false);
-  const [navOpen,setNavOpen]=useState(null); // hangi grup dropdown açık
+// ── İNLİNE STİLLER (index.css'e taşınabilir) ──
+const GLOBAL_STYLE = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
 
-  // Supabaseden veri yükle
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0f1a; --bg2: #111827; --bg3: #1a2236; --surface: #162032;
+    --border: rgba(255,255,255,0.06); --border2: rgba(255,255,255,0.12);
+    --gold: #f5a623; --gold2: #fbbf24; --gold-dim: rgba(245,166,35,0.12);
+    --teal: #10d9a0; --teal-dim: rgba(16,217,160,0.1);
+    --blue: #60a5fa; --blue-dim: rgba(96,165,250,0.1);
+    --red: #f87171; --red-dim: rgba(248,113,113,0.1);
+    --purple: #a78bfa; --rose: #f72585; --rose-dim: rgba(247,37,133,0.1);
+    --text: #f1f5f9; --text2: #94a3b8; --text3: #475569;
+    --ff: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+    --sidebar-w: 220px; --header-h: 56px;
+    --radius: 12px; --radius-sm: 8px;
+    --shadow: 0 4px 20px rgba(0,0,0,0.35); --shadow-lg: 0 8px 40px rgba(0,0,0,0.5);
+  }
+
+  body { font-family: var(--ff); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  button { font-family: var(--ff); cursor: pointer; outline: none; }
+  input, select, textarea { font-family: var(--ff); }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .app-shell { display: flex; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: var(--sidebar-w); min-width: var(--sidebar-w);
+    background: var(--bg2); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; height: 100vh;
+    z-index: 100; transition: transform .25s ease;
+    overflow-y: auto;
+  }
+  .main-area { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar {
+    height: var(--header-h); background: var(--bg2); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 24px; gap: 12px;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .page-content { padding: 24px; flex: 1; }
+
+  .sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .sidebar-logo .wordmark { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
+  .sidebar-logo .wordmark em { color: var(--gold); font-style: normal; }
+  .sidebar-logo .v-badge { font-size: 9px; font-family: var(--mono); color: var(--text3); background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; margin-left: auto; }
+
+  .nav-section { padding: 12px 8px 2px; }
+  .nav-section-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; padding: 0 8px; margin-bottom: 4px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 10px; border-radius: var(--radius-sm);
+    color: var(--text2); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all .15s; border: 1px solid transparent;
+    margin-bottom: 1px; background: none;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+  .nav-item.active { background: var(--gold-dim); border-color: rgba(245,166,35,0.2); color: var(--gold); }
+  .nav-item .nav-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+  .nav-badge { margin-left: auto; background: #ef4444; color: #fff; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
+  .nav-item.locked { opacity: .4; cursor: not-allowed; }
+
+  .sidebar-footer { margin-top: auto; padding: 10px; border-top: 1px solid var(--border); }
+  .user-card { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--bg3); }
+  .user-avatar { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .user-info .uname { font-size: 12px; font-weight: 600; }
+  .user-info .urole { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+
+  /* TOPBAR */
+  .page-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .topbar-pill {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 10px; font-size: 11px;
+    color: var(--text2); font-family: var(--mono); cursor: pointer; transition: all .15s;
+  }
+  .topbar-pill:hover { border-color: var(--border2); color: var(--text); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+
+  /* CARDS */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+  .kpi-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 20px; position: relative; overflow: hidden; transition: border-color .15s;
+  }
+  .kpi-card:hover { border-color: var(--border2); }
+  .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: var(--kc, var(--gold)); }
+  .kpi-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+  .kpi-value { font-size: 24px; font-weight: 700; color: var(--kc, var(--text)); line-height: 1; margin-bottom: 6px; }
+  .kpi-delta { font-size: 11px; color: var(--text3); }
+  .kpi-delta.up { color: var(--teal); }
+  .kpi-delta.dn { color: var(--red); }
+
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .panel-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .ptag { font-size: 10px; font-weight: 500; background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 1px 7px; color: var(--text3); font-family: var(--mono); }
+
+  /* GRIDS */
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .g65 { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
+
+  /* TABLES */
+  .tbl { width:100%; border-collapse:collapse; font-size:12px; }
+  .tbl th { text-align:left; padding:8px 12px; font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .tbl td { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--text2); vertical-align:middle; }
+  .tbl tbody tr:hover td { background:rgba(255,255,255,0.02); color:var(--text); }
+  .tbl tbody tr:last-child td { border-bottom:none; }
+  .tbl .num { font-family:var(--mono); font-size:11px; }
+  .tbl .name { font-weight:600; color:var(--text); }
+
+  /* BUTTONS */
+  .btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 14px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--bg3); color: var(--text2);
+    transition: all .15s; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--border2); color: var(--text); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary { background: var(--gold); color: #000; border-color: var(--gold); font-weight: 600; }
+  .btn-primary:hover { background: var(--gold2); border-color: var(--gold2); color: #000; }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-ghost:hover { background: rgba(255,255,255,0.05); border-color: transparent; }
+  .btn-danger { background: var(--red-dim); border-color: rgba(248,113,113,.25); color: var(--red); }
+  .btn-sm { padding: 4px 10px; font-size: 11px; }
+  .btn-full { width: 100%; justify-content: center; }
+
+  /* FORMS */
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; font-weight: 500; color: var(--text3); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; }
+  .inp { width:100%; padding:8px 11px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:13px; font-family:var(--ff); transition:border-color .15s; }
+  .inp:focus { outline:none; border-color:var(--gold); }
+  .inp::placeholder { color:var(--text3); }
+  select.inp { cursor:pointer; }
+
+  /* SLIDER */
+  .slider { -webkit-appearance:none; appearance:none; width:100%; height:3px; border-radius:2px; background:var(--border2); outline:none; cursor:pointer; }
+  .slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--gold); cursor:pointer; border:2px solid var(--bg); box-shadow:0 0 0 2px var(--gold); }
+
+  /* BADGES */
+  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:600; font-family:var(--mono); }
+  .badge-green { background:var(--teal-dim); color:var(--teal); border:1px solid rgba(16,217,160,.2); }
+  .badge-yellow { background:var(--gold-dim); color:var(--gold); border:1px solid rgba(245,166,35,.2); }
+  .badge-red { background:var(--red-dim); color:var(--red); border:1px solid rgba(248,113,113,.2); }
+  .badge-blue { background:var(--blue-dim); color:var(--blue); border:1px solid rgba(96,165,250,.2); }
+  .badge-purple { background:rgba(167,139,250,.1); color:var(--purple); border:1px solid rgba(167,139,250,.2); }
+
+  /* PROGRESS */
+  .progress-bar { height:4px; background:var(--border2); border-radius:2px; overflow:hidden; }
+  .progress-fill { height:100%; border-radius:2px; transition:width .5s ease; }
+
+  /* MONTH GRID */
+  .mgrid { display:grid; grid-template-columns:repeat(12,1fr); gap:6px; }
+  .mcell { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 8px; text-align:center; transition:border-color .15s; }
+  .mcell.real { border-color:rgba(96,165,250,.2); }
+  .mcell.sim { border-color:rgba(16,217,160,.15); }
+  .mcell:hover { border-color:var(--border2); }
+
+  /* MODAL */
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.65); display:flex; align-items:center; justify-content:center; z-index:1000; backdrop-filter:blur(4px); }
+  .modal { background:var(--bg2); border:1px solid var(--border2); border-radius:16px; padding:24px; position:relative; max-height:90vh; overflow-y:auto; box-shadow:var(--shadow-lg); }
+  .modal-title { font-size:16px; font-weight:700; margin-bottom:4px; }
+  .modal-sub { font-size:12px; color:var(--text3); margin-bottom:20px; }
+
+  /* NOTIFS */
+  .notif { padding:10px 14px; border-radius:var(--radius-sm); font-size:12px; margin-bottom:10px; }
+  .notif-info { background:var(--blue-dim); border:1px solid rgba(96,165,250,.2); color:var(--blue); }
+  .notif-warn { background:var(--gold-dim); border:1px solid rgba(245,166,35,.2); color:var(--gold); }
+  .notif-error { background:var(--red-dim); border:1px solid rgba(248,113,113,.2); color:var(--red); }
+  .notif-success { background:var(--teal-dim); border:1px solid rgba(16,217,160,.2); color:var(--teal); }
+
+  /* TAB BAR */
+  .tab-bar { display:flex; gap:4px; padding:4px; background:var(--bg3); border-radius:var(--radius-sm); border:1px solid var(--border); margin-bottom:16px; flex-wrap:wrap; }
+  .tab-btn { padding:6px 14px; border-radius:6px; font-size:12px; font-weight:500; color:var(--text3); cursor:pointer; transition:all .15s; border:1px solid transparent; background:transparent; }
+  .tab-btn:hover { color:var(--text); }
+  .tab-btn.active { background:var(--bg2); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.3); border-color:var(--border); }
+
+  /* INSIGHT */
+  .insight-card { background:var(--bg3); border:1px solid var(--border); border-left:3px solid var(--ic,var(--gold)); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:8px; }
+  .insight-title { font-size:12px; font-weight:600; color:var(--ic,var(--gold)); margin-bottom:4px; }
+  .insight-body { font-size:11px; color:var(--text2); line-height:1.6; }
+
+  /* LOGIN */
+  .login-page { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); padding:20px; }
+  .login-card { width:100%; max-width:400px; background:var(--bg2); border:1px solid var(--border2); border-radius:20px; padding:36px; box-shadow:var(--shadow-lg); }
+  .login-logo { text-align:center; margin-bottom:28px; }
+  .login-logo .wordmark { font-size:28px; font-weight:800; letter-spacing:-.5px; }
+  .login-logo .wordmark em { color:var(--gold); font-style:normal; }
+  .login-logo .sub { font-size:12px; color:var(--text3); margin-top:4px; }
+  .login-divider { height:1px; background:var(--border); margin:20px 0; }
+  .login-footer { text-align:center; margin-top:16px; font-size:10px; color:var(--text3); font-family:var(--mono); }
+  .demo-row { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:4px; }
+  .demo-row .di { font-size:12px; font-weight:600; }
+  .demo-row .dc { font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:1px; }
+
+  /* MISC */
+  .divider { border:none; border-top:1px solid var(--border); margin:16px 0; }
+  .mono { font-family:var(--mono); font-size:11px; }
+
+  /* CHAT */
+  .chat-msg-ai { background:var(--bg3); border:1px solid var(--border); border-radius:12px 12px 12px 3px; padding:12px 14px; font-size:13px; line-height:1.7; }
+  .chat-msg-user { background:var(--gold-dim); border:1px solid rgba(245,166,35,.2); border-radius:12px 12px 3px 12px; padding:12px 14px; font-size:13px; text-align:right; }
+
+  /* MOBILE */
+  @media(max-width:768px){
+    .sidebar { transform:translateX(-100%); width:260px; }
+    .sidebar.open { transform:translateX(0); box-shadow:var(--shadow-lg); }
+    .main-area { margin-left:0; }
+    .kpi-grid { grid-template-columns:repeat(2,1fr); }
+    .g65, .g2, .g3 { grid-template-columns:1fr; }
+    .mgrid { grid-template-columns:repeat(6,1fr); }
+    .topbar { padding:0 16px; }
+    .page-content { padding:16px; }
+    .menu-toggle { display:flex !important; }
+  }
+  .menu-toggle { display:none; align-items:center; justify-content:center; width:36px; height:36px; border-radius:var(--radius-sm); background:var(--bg3); border:1px solid var(--border); cursor:pointer; flex-shrink:0; font-size:18px; color:var(--text); }
+
+  /* LIGHT THEME */
+  .light-theme { --bg:#f1f5f9; --bg2:#ffffff; --bg3:#f8fafc; --border:rgba(0,0,0,.08); --border2:rgba(0,0,0,.15); --text:#0f172a; --text2:#334155; --text3:#94a3b8; }
+  .light-theme .sidebar, .light-theme .topbar, .light-theme .panel, .light-theme .kpi-card { box-shadow:0 1px 3px rgba(0,0,0,.08); }
+
+  /* Eski class uyumluluk katmanı */
+  .btn.bp, .btn.btn-primary { background:var(--gold); color:#000; border-color:var(--gold); font-weight:600; }
+  .btn.bp:hover, .btn.btn-primary:hover { background:var(--gold2); }
+  .btn.bg { background:var(--bg3); color:var(--text2); border-color:var(--border); }
+  .btn.bfull, .btn-full { width:100%; justify-content:center; }
+  .ptitle, .panel-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+  .notif.ny, .notif-warn { background:var(--gold-dim); border:1px solid rgba(245,166,35,.2); color:var(--gold); }
+  .notif.nb, .notif-info { background:var(--blue-dim); border:1px solid rgba(96,165,250,.2); color:var(--blue); }
+  .notif.ng, .notif-success { background:var(--teal-dim); border:1px solid rgba(16,217,160,.2); color:var(--teal); }
+  .kgrid, .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .kcard, .kpi-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; position:relative; overflow:hidden; }
+  .kcard::before, .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--kc,var(--gold)); }
+  .klbl, .kpi-label { font-size:11px; color:var(--text3); font-weight:500; text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px; }
+  .kval, .kpi-value { font-size:24px; font-weight:700; color:var(--kc,var(--text)); line-height:1; margin-bottom:6px; }
+  .kdelta, .kpi-delta { font-size:11px; color:var(--text3); }
+  .mg, .field { margin-bottom:12px; }
+  .lbl { display:block; font-size:11px; font-weight:500; color:var(--text3); margin-bottom:5px; text-transform:uppercase; letter-spacing:.05em; }
+  .badge.by2, .badge-yellow { background:var(--gold-dim); color:var(--gold); border:1px solid rgba(245,166,35,.2); }
+  .badge.bg2, .badge-green { background:var(--teal-dim); color:var(--teal); border:1px solid rgba(16,217,160,.2); }
+  .badge.br2, .badge-red { background:var(--red-dim); color:var(--red); border:1px solid rgba(248,113,113,.2); }
+  .aicard { background:var(--bg3); border:1px solid var(--border); border-left:3px solid var(--ac,var(--gold)); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:8px; }
+  .aicard .t { font-size:12px; font-weight:600; color:var(--ac,var(--gold)); margin-bottom:4px; }
+  .aicard .x { font-size:11px; color:var(--text2); line-height:1.6; }
+  .aip { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:16px; }
+  .aigrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .slider { -webkit-appearance:none; appearance:none; width:100%; height:3px; border-radius:2px; background:var(--border2); outline:none; cursor:pointer; }
+  .slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--gold); cursor:pointer; border:2px solid var(--bg); box-shadow:0 0 0 2px var(--gold); }
+  .mcell { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 8px; text-align:center; }
+  .mcell.real { border-color:rgba(96,165,250,.2); }
+  .mcell.sim { border-color:rgba(16,217,160,.15); }
+  .notif { padding:10px 14px; border-radius:var(--radius-sm); font-size:12px; margin-bottom:10px; }
+  .panel { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:16px; }
+  .tbl { width:100%; border-collapse:collapse; font-size:12px; }
+  .tbl th { text-align:left; padding:8px 12px; font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .tbl td { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--text2); vertical-align:middle; }
+  .tbl tbody tr:hover td { background:rgba(255,255,255,0.02); }
+  .tbl tbody tr:last-child td { border-bottom:none; }
+  .inp { width:100%; padding:8px 11px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:13px; font-family:var(--ff); transition:border-color .15s; }
+  .inp:focus { outline:none; border-color:var(--gold); }
+  .inp::placeholder { color:var(--text3); }
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.65); display:flex; align-items:center; justify-content:center; z-index:1000; backdrop-filter:blur(4px); }
+  .modal { background:var(--bg2); border:1px solid var(--border2); border-radius:16px; padding:24px; position:relative; max-height:90vh; overflow-y:auto; box-shadow:var(--shadow-lg); }
+  .g65 { display:grid; grid-template-columns:1fr 340px; gap:16px; }
+  .g2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+  .mgrid { display:grid; grid-template-columns:repeat(12,1fr); gap:6px; }
+  .sdiv { height:1px; background:var(--border); margin:18px 0; }
+  .chat-msg-ai { background:var(--bg3); border:1px solid var(--border); border-radius:14px 14px 14px 4px; padding:12px 14px; }
+  .chat-msg-user { background:rgba(245,166,35,0.1); border:1px solid rgba(245,166,35,0.2); border-radius:14px 14px 4px 14px; padding:12px 14px; }
+  @media(max-width:768px){
+    .kgrid, .kpi-grid { grid-template-columns:repeat(2,1fr); }
+    .g65, .g2, .g3 { grid-template-columns:1fr; }
+    .mgrid { grid-template-columns:repeat(6,1fr); }
+    .aigrid { grid-template-columns:1fr; }
+  }
+`;
+
+function App() {
+  const [user, setUser] = useState(() => { try { const u = localStorage.getItem('rv_user'); return u ? JSON.parse(u) : null; } catch { return null; } });
+  const [tab, setTab] = useState('dash');
+  const [theme, setTheme] = useState(() => localStorage.getItem('rv_theme') || 'Koyu Okyanus');
+  const [themeModal, setThemeModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsModal, setSettingsModal] = useState(false);
+
+  useEffect(() => { applyTheme(theme); }, [theme]);
+  useEffect(() => {
+    // Inject global styles
+    const id = 'ros-global-style';
+    if (!document.getElementById(id)) {
+      const el = document.createElement('style');
+      el.id = id;
+      el.textContent = GLOBAL_STYLE;
+      document.head.appendChild(el);
+    }
+  }, []);
+  useEffect(() => {
+    const close = () => setSidebarOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, []);
+
+  const [simOcc, setSimOcc] = useState(85);
+  const [simAdr, setSimAdr] = useState(225);
+  const [monthly, setMonthly] = useState(DEFM);
+  const [ac, setAc] = useState(DEFC);
+  const [sbCfg, setSbCfg] = useState({ url: (SUPABASE_URL && SUPABASE_URL.trim()) || localStorage.getItem('sb_url') || '', key: (SUPABASE_KEY && SUPABASE_KEY.trim()) || localStorage.getItem('sb_key') || '' });
+  const [sbReady, setSbReady] = useState(!!((SUPABASE_URL && SUPABASE_URL.trim()) || localStorage.getItem('sb_url')) && !!((SUPABASE_KEY && SUPABASE_KEY.trim()) || localStorage.getItem('sb_key')));
+  const [sbStatus, setSbStatus] = useState('idle');
+  const [sbModal, setSbModal] = useState(false);
+  const [groqKey, setGroqKey] = useState('');
+  const [groqSaved, setGroqSaved] = useState(false);
+  const [groqKeyInput, setGroqKeyInput] = useState('');
+  const [dbSync, setDbSync] = useState(false);
+  const [users, setUsers] = useState(() => { try { const s = localStorage.getItem('rv_users'); if (s) { const p = JSON.parse(s); if (p && p.length > 0) return p; } } catch (e) {} return USERS; });
+
+  // ── DB FONKSİYONLARI ── (değişmedi)
   const loadFromDB = async () => {
-    const sb=getSupabase(); if(!sb)return;
+    const sb = getSupabase(); if (!sb) return;
     setDbSync(true);
-    try{
-      const [{data:mData},{data:aData}]=await Promise.all([
+    try {
+      const [{ data: mData }, { data: aData }] = await Promise.all([
         sb.from('monthly_targets').select('*').order('month_index'),
         sb.from('agencies').select('*,agency_monthly(month_index,target)')
       ]);
-      if(mData&&mData.length>0){
-        const mapped=mData.map(r=>({
-          m:MS[r.month_index], g:r.actual||null,
-          h:r.target, o:r.occ_target||null, a:r.adr_target||null
-        }));
-        setMonthly(mapped);
-      }
-      if(aData&&aData.length>0){
-        const mapped=aData.map(r=>({
-          id:r.id, ad:r.name, tip:r.type, kom:r.commission,
-          hedef:r.annual_target, ciro:r.actual_revenue||0, ind:r.discount||0,
-          ay: Array(12).fill(0).map((_,i)=>{
-            const m=r.agency_monthly?.find(x=>x.month_index===i);
-            return m?m.target:Math.round(r.annual_target/12);
-          })
-        }));
-        setAc(mapped);
-      }
-    }catch(e){console.error('DB load error:',e);}
+      if (mData && mData.length > 0) setMonthly(mData.map(r => ({ m: MS[r.month_index], g: r.actual || null, h: r.target, o: r.occ_target || null, a: r.adr_target || null })));
+      if (aData && aData.length > 0) setAc(aData.map(r => ({ id: r.id, ad: r.name, tip: r.type, kom: r.commission, hedef: r.annual_target, ciro: r.actual_revenue || 0, ind: r.discount || 0, ay: Array(12).fill(0).map((_, i) => { const m = r.agency_monthly?.find(x => x.month_index === i); return m ? m.target : Math.round(r.annual_target / 12); }) })));
+    } catch (e) { console.error('DB load error:', e); }
     setDbSync(false);
   };
 
-  // Supabaseden ayarları yükle (Groq key + sim parametreleri)
   const loadSettings = async () => {
-    const sb=getSupabase(); if(!sb)return;
-    try{
-      const {data}=await sb.from('app_settings').select('key,value');
-      if(data){
-        const gk=data.find(r=>r.key==='groq_api_key');
-        if(gk){setGroqKey(gk.value);setGroqSaved(true);}
-        const occ=data.find(r=>r.key==='sim_occ');
-        if(occ){setSimOcc(+occ.value);}
-        const adr=data.find(r=>r.key==='sim_adr');
-        if(adr){setSimAdr(+adr.value);}
+    const sb = getSupabase(); if (!sb) return;
+    try {
+      const { data } = await sb.from('app_settings').select('key,value');
+      if (data) {
+        const gk = data.find(r => r.key === 'groq_api_key'); if (gk) { setGroqKey(gk.value); setGroqSaved(true); }
+        const occ = data.find(r => r.key === 'sim_occ'); if (occ) setSimOcc(+occ.value);
+        const adr = data.find(r => r.key === 'sim_adr'); if (adr) setSimAdr(+adr.value);
       }
-    }catch(e){console.error('Settings load error:',e);}
+    } catch (e) { console.error('Settings load error:', e); }
   };
 
-  // Kullanıcıları DB'den yükle
   const loadUsers = async () => {
-    const sb=getSupabase(); if(!sb)return;
-    try{
-      const {data,error}=await sb.from('app_users').select('*');
-      if(error||!data||data.length===0)return;
-      const mapped=data.map(u=>({
-        id:u.uid, name:u.name, email:u.email, pass:u.pass,
-        role:u.role, av:u.av||u.name.substring(0,2).toUpperCase(),
-        color:u.color||'#f0b429',
-        p:{dash:u.p_dash,acente:u.p_acente,proj:u.p_proj,editor:u.p_editor,
-           ai:u.p_ai,hedef:u.p_hedef,ciro:u.p_ciro,kom:u.p_kom,
-           admin:u.p_admin,addac:u.p_addac}
-      }));
+    const sb = getSupabase(); if (!sb) return;
+    try {
+      const { data, error } = await sb.from('app_users').select('*');
+      if (error || !data || data.length === 0) return;
+      const mapped = data.map(u => ({ id: u.uid, name: u.name, email: u.email, pass: u.pass, role: u.role, av: u.av || u.name.substring(0, 2).toUpperCase(), color: u.color || '#f0b429', p: { dash: u.p_dash, acente: u.p_acente, proj: u.p_proj, editor: u.p_editor, ai: u.p_ai, hedef: u.p_hedef, ciro: u.p_ciro, kom: u.p_kom, admin: u.p_admin, addac: u.p_addac } }));
       setUsers(mapped);
-      // Logged-in user'ı güncelle
-      saveUsersLocal(mapped);
-      setUser(prev=>{
-        if(!prev)return prev;
-        const updated=mapped.find(u=>u.id===prev.id||u.email===prev.email);
-        if(updated){localStorage.setItem('rv_user',JSON.stringify(updated));return updated;}
-        return prev;
-      });
-    }catch(e){console.error('Load users error:',e);}
-  };
-
-  // Kullanicilar LocalStorage'a kaydet (Supabase yoksa fallback)
-  const saveUsersLocal = (list) => {
-    try{ localStorage.setItem('rv_users', JSON.stringify(list)); }catch(e){}
+      try { localStorage.setItem('rv_users', JSON.stringify(mapped)); } catch (e) {}
+      setUser(prev => { if (!prev) return prev; const updated = mapped.find(u => u.id === prev.id || u.email === prev.email); if (updated) { localStorage.setItem('rv_user', JSON.stringify(updated)); return updated; } return prev; });
+    } catch (e) { console.error('Load users error:', e); }
   };
 
   const saveUser = async (u) => {
-    const normalizedU = {
-      ...u,
-      av: u.av||u.name.substring(0,2).toUpperCase().replace(' ',''),
-      color: u.color||'#f0b429',
-    };
-    // Her zaman local state guncelle
-    setUsers(prev => {
-      const exists = prev.find(x=>x.id===normalizedU.id);
-      const next = exists
-        ? prev.map(x=>x.id===normalizedU.id ? normalizedU : x)
-        : [...prev, normalizedU];
-      saveUsersLocal(next);
-      return next;
-    });
-    // Supabase varsa DB'ye de yaz
-    if(sbReady){
-      const sb=getSupabase();
-      try{
-        const row={
-          uid:normalizedU.id, name:normalizedU.name, email:normalizedU.email, pass:normalizedU.pass,
-          role:normalizedU.role, av:normalizedU.av, color:normalizedU.color,
-          p_dash:normalizedU.p.dash?1:0, p_acente:normalizedU.p.acente?1:0, p_proj:normalizedU.p.proj?1:0,
-          p_editor:normalizedU.p.editor?1:0, p_ai:normalizedU.p.ai?1:0, p_hedef:normalizedU.p.hedef?1:0,
-          p_ciro:normalizedU.p.ciro?1:0, p_kom:normalizedU.p.kom?1:0, p_admin:normalizedU.p.admin?1:0,
-          p_addac:normalizedU.p.addac?1:0
-        };
-        const {error}=await sb.from('app_users').upsert(row,{onConflict:'uid'});
-        if(error) console.error('Supabase save user error:',error);
-      }catch(e){ console.error('Supabase save user error:',e); }
-    }
+    const nu = { ...u, av: u.av || u.name.substring(0, 2).toUpperCase().replace(' ', ''), color: u.color || '#f0b429' };
+    setUsers(prev => { const exists = prev.find(x => x.id === nu.id); const next = exists ? prev.map(x => x.id === nu.id ? nu : x) : [...prev, nu]; try { localStorage.setItem('rv_users', JSON.stringify(next)); } catch (e) {} return next; });
+    if (sbReady) { const sb = getSupabase(); try { const row = { uid: nu.id, name: nu.name, email: nu.email, pass: nu.pass, role: nu.role, av: nu.av, color: nu.color, p_dash: nu.p.dash ? 1 : 0, p_acente: nu.p.acente ? 1 : 0, p_proj: nu.p.proj ? 1 : 0, p_editor: nu.p.editor ? 1 : 0, p_ai: nu.p.ai ? 1 : 0, p_hedef: nu.p.hedef ? 1 : 0, p_ciro: nu.p.ciro ? 1 : 0, p_kom: nu.p.kom ? 1 : 0, p_admin: nu.p.admin ? 1 : 0, p_addac: nu.p.addac ? 1 : 0 }; await sb.from('app_users').upsert(row, { onConflict: 'uid' }); } catch (e) {} }
     return true;
   };
 
   const deleteUser = async (uid) => {
-    // Her zaman local state ve localStorage'dan sil
-    setUsers(prev => {
-      const next = prev.filter(u=>u.id!==uid);
-      saveUsersLocal(next);
-      return next;
-    });
-    // Supabase varsa DB'den de sil
-    if(sbReady){
-      const sb=getSupabase();
-      try{ await sb.from('app_users').delete().eq('uid',uid); }
-      catch(e){ console.error('Supabase delete user error:',e); }
-    }
+    setUsers(prev => { const next = prev.filter(u => u.id !== uid); try { localStorage.setItem('rv_users', JSON.stringify(next)); } catch (e) {} return next; });
+    if (sbReady) { const sb = getSupabase(); try { await sb.from('app_users').delete().eq('uid', uid); } catch (e) {} }
   };
 
-  const initUsersInDB = async () => {
-    const sb=getSupabase(); if(!sb)return;
-    const {data}=await sb.from('app_users').select('uid').limit(1);
-    if(!data||data.length===0){
-      for(const u of USERS){ await saveUser(u); }
-    }
-  };
-
-  // Groq key'i Supabase'e kaydet
   const saveGroqKey = async (k) => {
-    const sb=getSupabase();
-    if(!sb){ console.warn('No Supabase'); return; }
-    try{
-      const {error}=await sb.from('app_settings').upsert({key:'groq_api_key',value:k.trim()},{onConflict:'key'});
-      if(error){console.error('Groq key save error:',error);return;}
-      setGroqKey(k.trim()); setGroqSaved(true); setGroqKeyInput('');
-    }catch(e){console.error('Settings save error:',e);}
+    const sb = getSupabase(); if (!sb) return;
+    try { await sb.from('app_settings').upsert({ key: 'groq_api_key', value: k.trim() }, { onConflict: 'key' }); setGroqKey(k.trim()); setGroqSaved(true); setGroqKeyInput(''); } catch (e) { console.error(e); }
   };
 
-  // Groq key'i sil
   const deleteGroqKey = async () => {
-    const sb=getSupabase(); if(!sb)return;
-    try{
-      await sb.from('app_settings').delete().eq('key','groq_api_key');
-      setGroqKey(''); setGroqSaved(false);
-    }catch(e){console.error('Settings delete error:',e);}
+    const sb = getSupabase(); if (!sb) return;
+    try { await sb.from('app_settings').delete().eq('key', 'groq_api_key'); setGroqKey(''); setGroqSaved(false); } catch (e) {}
   };
 
-  // Supabase'e veri kaydet
-  const saveToDB = async (opts={}) => {
-    const sb=getSupabase(); if(!sb)return;
+  const saveToDB = async (opts = {}) => {
+    const sb = getSupabase(); if (!sb) return;
     setDbSync(true);
-    try{
-      const m = opts.monthly ?? monthly;
-      const a = opts.ac ?? ac;
-      const occ = opts.simOcc ?? simOcc;
-      const adr = opts.simAdr ?? simAdr;
-
-      // Aylık hedefler
-      if(opts.monthly !== undefined || opts.forceAll){
-        const mRows=m.map((row,i)=>({
-          month_index:i, month_name:row.m,
-          target:row.h, actual:row.g||null,
-          occ_target:row.o||null, adr_target:row.a||null
-        }));
-        await sb.from('monthly_targets').upsert(mRows,{onConflict:'month_index'});
-      }
-
-      // Acenteler
-      if(opts.ac !== undefined || opts.forceAll){
-        const aRows=a.map(ag=>({
-          id:typeof ag.id==='number'&&ag.id<100000?ag.id:undefined,
-          name:ag.ad, type:ag.tip, commission:ag.kom,
-          annual_target:ag.hedef, actual_revenue:ag.ciro, discount:ag.ind
-        }));
-        const {data:savedAc}=await sb.from('agencies').upsert(aRows,{onConflict:'name'}).select();
-        if(savedAc){
-          const ayRows=savedAc.flatMap(sa=>{
-            const orig=a.find(ag=>ag.ad===sa.name);
-            return orig?orig.ay.map((t,i)=>({agency_id:sa.id,month_index:i,target:t})):[];
-          });
-          if(ayRows.length>0)
-            await sb.from('agency_monthly').upsert(ayRows,{onConflict:'agency_id,month_index'});
-        }
-      }
-
-      // Simülasyon parametreleri + diğer ayarlar
-      if(opts.simOcc !== undefined || opts.simAdr !== undefined || opts.forceAll){
-        await sb.from('app_settings').upsert([
-          {key:'sim_occ', value:String(occ)},
-          {key:'sim_adr', value:String(adr)},
-        ],{onConflict:'key'});
-      }
-
-    }catch(e){console.error('DB save error:',e);}
+    try {
+      const m = opts.monthly ?? monthly, a = opts.ac ?? ac, occ = opts.simOcc ?? simOcc, adr = opts.simAdr ?? simAdr;
+      if (opts.monthly !== undefined || opts.forceAll) await sb.from('monthly_targets').upsert(m.map((row, i) => ({ month_index: i, month_name: row.m, target: row.h, actual: row.g || null, occ_target: row.o || null, adr_target: row.a || null })), { onConflict: 'month_index' });
+      if (opts.simOcc !== undefined || opts.simAdr !== undefined || opts.forceAll) await sb.from('app_settings').upsert([{ key: 'sim_occ', value: String(occ) }, { key: 'sim_adr', value: String(adr) }], { onConflict: 'key' });
+    } catch (e) { console.error('DB save error:', e); }
     setDbSync(false);
   };
 
-  // Bağlantı test et
   const testConnection = async () => {
-    const url=sbCfg.url.trim(); const key=sbCfg.key.trim();
-    if(!url||!key){setSbStatus('error');return;}
+    const url = sbCfg.url.trim(), key = sbCfg.key.trim();
+    if (!url || !key) { setSbStatus('error'); return; }
     setSbStatus('connecting');
-    try{
-      // URL formatını doğrula
-      const cleanUrl = url.trim().replace(/\/+$/,'');
-      if(!cleanUrl.includes('.supabase.co')){
-        setSbStatus('error'); return;
-      }
-      localStorage.setItem('sb_url', cleanUrl);
-      localStorage.setItem('sb_key', key.trim());
-      resetSupabaseClient(); // Singleton'ı sıfırla
+    try {
+      const cleanUrl = url.trim().replace(/\/+$/, '');
+      if (!cleanUrl.includes('.supabase.co')) { setSbStatus('error'); return; }
+      localStorage.setItem('sb_url', cleanUrl); localStorage.setItem('sb_key', key.trim());
+      resetSupabaseClient();
       const client = getSupabase();
-      const {error}=await client.from('monthly_targets').select('month_index').limit(1);
-      if(error && error.code!=='PGRST116'){
-        setSbStatus('error');
-        localStorage.removeItem('sb_url'); localStorage.removeItem('sb_key');
-        resetSupabaseClient();
-        return;
-      }
-      setSbReady(true); setSbStatus('ok'); setSbModal(false);
-      const {data:existing}=await client.from('monthly_targets').select('month_index').limit(1);
-      if(!existing||existing.length===0){
-        // DB boş — mevcut lokal veriyi yükle
-        setTimeout(()=>saveToDB({forceAll:true}),500);
-      } else {
-        loadFromDB();
-      }
+      const { error } = await client.from('monthly_targets').select('month_index').limit(1);
+      if (error && error.code !== 'PGRST116') { setSbStatus('error'); localStorage.removeItem('sb_url'); localStorage.removeItem('sb_key'); resetSupabaseClient(); return; }
+      setSbReady(true); setSbStatus('ok'); setSbModal(false); setSettingsModal(false);
+      const { data: existing } = await client.from('monthly_targets').select('month_index').limit(1);
+      if (!existing || existing.length === 0) setTimeout(() => saveToDB({ forceAll: true }), 500);
+      else loadFromDB();
       loadSettings();
-    }catch(e){ setSbStatus('error'); }
+    } catch (e) { setSbStatus('error'); }
   };
 
   const disconnectDB = () => {
     localStorage.removeItem('sb_url'); localStorage.removeItem('sb_key');
-    resetSupabaseClient();
-    setSbReady(false); setSbStatus('idle');
-    setSbCfg({url:'',key:''});
-    setGroqKey(''); setGroqSaved(false);
+    resetSupabaseClient(); setSbReady(false); setSbStatus('idle');
+    setSbCfg({ url: '', key: '' }); setGroqKey(''); setGroqSaved(false);
     setMonthly(DEFM); setAc(DEFC);
   };
 
-  // Sadece sayfa ilk açıldığında yükle — değişiklikler ezilmesin
   const initialLoadDone = React.useRef(false);
-  useEffect(()=>{
-    if(sbReady && !initialLoadDone.current){
-      initialLoadDone.current = true;
-      loadFromDB();
-      loadSettings();
-      loadUsers();
-    }
-  },[sbReady]);
+  useEffect(() => { if (sbReady && !initialLoadDone.current) { initialLoadDone.current = true; loadFromDB(); loadSettings(); loadUsers(); } }, [sbReady]);
 
-  // setMonthly ve setAc'yi sarmala — DB varsa otomatik sync
-  const setMonthlySync = useCallback((v) => { setMonthly(v); if(sbReady)saveToDB({monthly:v}); },[sbReady]);
-  const setAcSync = useCallback((v) => { setAc(v); if(sbReady)saveToDB({ac:v}); },[sbReady]);
-
-  const setSimOccSync = useCallback((v) => { setSimOcc(v); },[]);
-  const setSimAdrSync = useCallback((v) => { setSimAdr(v); },[]);
-  const saveSimToDB = useCallback(async(occ,adr) => {
+  const setMonthlySync = useCallback((v) => { setMonthly(v); if (sbReady) saveToDB({ monthly: v }); }, [sbReady]);
+  const setAcSync = useCallback((v) => { setAc(v); if (sbReady) saveToDB({ ac: v }); }, [sbReady]);
+  const setSimOccSync = useCallback((v) => { setSimOcc(v); }, []);
+  const setSimAdrSync = useCallback((v) => { setSimAdr(v); }, []);
+  const saveSimToDB = useCallback(async (occ, adr) => {
     setSimOcc(occ); setSimAdr(adr);
-    if(!sbReady) return;
-    const sb=getSupabase(); if(!sb) return;
+    if (!sbReady) return;
+    const sb = getSupabase(); if (!sb) return;
     setDbSync(true);
-    try{
-      await sb.from('app_settings').upsert([
-        {key:'sim_occ',value:String(occ)},
-        {key:'sim_adr',value:String(adr)},
-      ],{onConflict:'key'});
-    }catch(e){console.error('Sim save error:',e);}
+    try { await sb.from('app_settings').upsert([{ key: 'sim_occ', value: String(occ) }, { key: 'sim_adr', value: String(adr) }], { onConflict: 'key' }); } catch (e) {}
     setDbSync(false);
-  },[sbReady]);
+  }, [sbReady]);
 
-  // Acente ekle — state + DB
   const addAcente = useCallback(async (form) => {
     const tmpId = Date.now();
-    const newItem = {
-      id:tmpId, ad:form.ad.trim(), tip:form.tip,
-      kom:+form.kom, hedef:+form.hedef*1000,
-      ind:+form.ind, ciro:0,
-      ay:Array(12).fill(Math.round(+form.hedef*1000/12))
-    };
-    // Önce UI'ı güncelle
-    setAc(prev=>[...prev,newItem]);
-    // Sonra DBye yaz — sbReady closure yerine localStorageden kontrol
-    const _ready = !!getSupabase();
-    if(!_ready) return;
-    const sb=getSupabase();
-    if(!sb) return;
+    const newItem = { id: tmpId, ad: form.ad.trim(), tip: form.tip, kom: +form.kom, hedef: +form.hedef * 1000, ind: +form.ind, ciro: 0, ay: Array(12).fill(Math.round(+form.hedef * 1000 / 12)) };
+    setAc(prev => [...prev, newItem]);
+    const _ready = !!getSupabase(); if (!_ready) return;
+    const sb = getSupabase(); if (!sb) return;
     setDbSync(true);
-    try{
-      const {data:saved,error}=await sb.from('agencies').insert({
-        name:newItem.ad, type:newItem.tip, commission:newItem.kom,
-        annual_target:newItem.hedef, actual_revenue:0, discount:newItem.ind
-      }).select().single();
-      if(error){
-        console.error('Add agency error:',error);
-        // DBye yazılamadıysa UIdan da geri al
-        setAc(prev=>prev.filter(a=>a.id!==tmpId));
-      } else if(saved){
-        const ayRows=newItem.ay.map((t,i)=>({agency_id:saved.id,month_index:i,target:t}));
-        await sb.from('agency_monthly').insert(ayRows);
-        // Geçici ID'yi gerçek DB ID'siyle değiştir
-        setAc(prev=>prev.map(a=>a.id===tmpId?{...a,id:saved.id}:a));
-      }
-    }catch(e){
-      console.error('Add agency error:',e);
-      setAc(prev=>prev.filter(a=>a.id!==tmpId));
-    }
+    try {
+      const { data: saved, error } = await sb.from('agencies').insert({ name: newItem.ad, type: newItem.tip, commission: newItem.kom, annual_target: newItem.hedef, actual_revenue: 0, discount: newItem.ind }).select().single();
+      if (error) setAc(prev => prev.filter(a => a.id !== tmpId));
+      else if (saved) { await sb.from('agency_monthly').insert(newItem.ay.map((t, i) => ({ agency_id: saved.id, month_index: i, target: t }))); setAc(prev => prev.map(a => a.id === tmpId ? { ...a, id: saved.id } : a)); }
+    } catch (e) { setAc(prev => prev.filter(a => a.id !== tmpId)); }
     setDbSync(false);
-  },[sbReady]);
+  }, [sbReady]);
 
-  // Acente sil — state + DB
   const deleteAcente = useCallback(async (id) => {
-    // Önce state'den bul (closure sorunu yaşanmasın)
     setAc(prev => {
-      const item = prev.find(a=>a.id===id);
+      const item = prev.find(a => a.id === id);
       const _ready = !!getSupabase();
-      if(_ready && item){
-        const sb=getSupabase();
-        if(sb){
-          setDbSync(true);
-          sb.from('agencies').delete().eq('name', item.ad)
-            .then(({error})=>{
-              if(error) console.error('Delete error:',error);
-              setDbSync(false);
-            });
-        }
-      }
-      return prev.filter(a=>a.id!==id);
+      if (_ready && item) { const sb = getSupabase(); if (sb) { setDbSync(true); sb.from('agencies').delete().eq('name', item.ad).then(() => setDbSync(false)); } }
+      return prev.filter(a => a.id !== id);
     });
-  },[sbReady]);
+  }, [sbReady]);
 
-  if(!user)return <Login onLogin={u=>{setUser(u);localStorage.setItem('rv_user',JSON.stringify(u));setTab('dash');}} allUsers={users}/>;
+  if (!user) return <Login onLogin={u => { setUser(u); localStorage.setItem('rv_user', JSON.stringify(u)); setTab('dash'); }} allUsers={users} />;
 
-  // Gruplu navigasyon yapısı
-  const NAV_GROUPS=[
-    {id:'genel', l:'Ana Sayfa', icon:'📊', single:true, tab:'dash', ok:1},
-    {id:'satis_grup', l:'Satış & Acente', icon:'💼', ok:user.p.acente, items:[
-      {id:'acente',    l:'Acenteler',       icon:'🏢', desc:'Acente ciro ve hedef takibi',  ok:user.p.acente},
-      {id:'satis',     l:'Satış Araçları',  icon:'🎯', desc:'Skor kartı, kotasyon, sözleşme', ok:user.p.acente},
-      {id:'proj',      l:'Projeksiyon',     icon:'📈', desc:'Senaryo ve simülasyon',       ok:user.p.proj},
-    ]},
-    {id:'analiz_grup', l:'Analiz & Veri', icon:'🔬', ok:user.p.proj, items:[
-      {id:'analiz',    l:'Veri Analizi',    icon:'🔬', desc:'Pick-up, forecast, kanal mix, LoS', ok:user.p.proj},
-      {id:'zeka',      l:'Zeka Merkezi',    icon:'🧠', desc:'Rakip fiyat, anomali, insight',    ok:user.p.proj},
-      {id:'raporlama', l:'Raporlama',       icon:'📋', desc:'PDF raporlar, CSV export',          ok:user.p.ciro},
-    ]},
-    {id:'ops_grup', l:'Operasyon', icon:'🏨', ok:user.p.proj, items:[
-      {id:'operasyon', l:'Operasyonel',     icon:'🏨', desc:'Takvim, upgrade, blackout',    ok:user.p.proj},
-      {id:'bildirim',  l:'Bildirim & Takip',icon:'🔔', desc:'Alertler, görevler, log',     ok:1},
-    ]},
-    {id:'yonetim_grup', l:'Yönetim', icon:'⚙️', ok:1, items:[
-      {id:'editor',    l:'Hedef Editörü',   icon:'🎯', desc:'Aylık hedef ve bütçe düzenleme', ok:1},
-      {id:'ai',        l:'AI Asistan',      icon:'🤖', desc:'Yapay zeka analiz asistanı',     ok:user.p.ai},
-      {id:'users',     l:'Kullanıcılar',    icon:'👥', desc:'Kullanıcı ve yetki yönetimi',    ok:user.p.admin},
-    ]},
+  // ── SIDEBAR NAV ──
+  const NAV = [
+    {
+      section: 'Ana', items: [
+        { id: 'dash', l: 'Dashboard', icon: '📊', ok: 1 },
+      ]
+    },
+    {
+      section: 'Satış', items: [
+        { id: 'acente', l: 'Acenteler', icon: '🏢', ok: user.p.acente },
+        { id: 'satis', l: 'Satış', icon: '🎯', ok: user.p.acente },
+        { id: 'proj', l: 'Projeksiyon', icon: '📈', ok: user.p.proj },
+      ]
+    },
+    {
+      section: 'Analiz', items: [
+        { id: 'analiz', l: 'Veri Analizi', icon: '🔬', ok: user.p.proj },
+        { id: 'zeka', l: 'Zeka Merkezi', icon: '🧠', ok: user.p.proj },
+        { id: 'raporlama', l: 'Raporlama', icon: '📋', ok: user.p.ciro },
+      ]
+    },
+    {
+      section: 'Operasyon', items: [
+        { id: 'operasyon', l: 'Takvim & Ops', icon: '🏨', ok: user.p.proj },
+        { id: 'bildirim', l: 'Bildirim', icon: '🔔', ok: 1 },
+      ]
+    },
+    {
+      section: 'Yönetim', items: [
+        { id: 'editor', l: 'Hedef Editörü', icon: '🎯', ok: 1 },
+        { id: 'ai', l: 'AI Asistan', icon: '🤖', ok: user.p.ai },
+        { id: 'users', l: 'Kullanıcılar', icon: '👥', ok: user.p.admin },
+      ]
+    },
   ];
-  // Tüm tab idleri (render için)
-  const TABS=NAV_GROUPS.flatMap(g=>g.single?[{id:g.tab,ok:g.ok}]:(g.items||[]));
-  const hT=monthly.reduce((a,b)=>a+b.h,0);
-  const perms=[user.p.editor&&{l:'Hedef Düzenle',g:1},user.p.ciro&&{l:'Ciro Görüntüle',g:1},user.p.kom&&{l:'Komisyon Görüntüle',g:1},!user.p.admin&&{l:'Kullanıcı Yönetimi—Kısıtlı',g:0}].filter(Boolean);
 
-  return(
-    <div>
-      <div className="header">
-        <div className="logo">Revenue<em style={{color:'var(--gold)',fontStyle:'normal'}}>OS</em></div>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <div className="lpill"><div className="ldot"/>CANLI</div>
-          <div style={{fontSize:11,color:'var(--text2)',fontFamily:'var(--mono)'}}>Elektra Web PMS • Demo</div>
-          {dbSync&&(
-            <div style={{display:'flex',alignItems:'center',gap:5,background:'rgba(240,180,41,0.1)',border:'1px solid rgba(240,180,41,0.3)',borderRadius:20,padding:'4px 10px'}}>
-              <div style={{width:5,height:5,borderRadius:'50%',background:'var(--gold)',animation:'pulse 2s infinite'}}/>
-              <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--gold)'}}>Senkronize ediliyor…</span>
+  const hT = monthly.reduce((a, b) => a + b.h, 0);
+  const gT2 = monthly.filter(m => m.g != null).reduce((a, b) => a + b.g, 0);
+  const pct2 = hT > 0 ? gT2 / hT * 100 : 0;
+  const critCount = (pct2 < 70 ? 1 : 0) + ac.filter(a => a.ciro / a.hedef * 100 < 50).length;
+  const activeLabel = NAV.flatMap(g => g.items).find(it => it.id === tab)?.l || 'Dashboard';
+
+  return (
+    <div className="app-shell" onClick={() => setSidebarOpen(false)}>
+
+      {/* ── SIDEBAR ── */}
+      <div className={`sidebar${sidebarOpen ? ' open' : ''}`} onClick={e => e.stopPropagation()}>
+        <div className="sidebar-logo">
+          <div className="wordmark">Revenue<em>OS</em></div>
+          <span className="v-badge">v3</span>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }}>
+          {NAV.map((group, gi) => (
+            <div key={gi}>
+              <div className="nav-section">
+                <div className="nav-section-label">{group.section}</div>
+              </div>
+              <div style={{ padding: '0 6px' }}>
+                {group.items.filter(it => it.ok).map(it => {
+                  const crit = it.id === 'bildirim' ? critCount : 0;
+                  return (
+                    <button key={it.id}
+                      className={`nav-item${tab === it.id ? ' active' : ''}`}
+                      onClick={() => { setTab(it.id); setSidebarOpen(false); }}>
+                      <span className="nav-icon">{it.icon}</span>
+                      <span>{it.l}</span>
+                      {crit > 0 && <span className="nav-badge">{crit}</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
+          ))}
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <div className="uchip"><div className="avatar" style={{background:user.color+'22',color:user.color}}>{user.av}</div><span style={{fontSize:12,fontWeight:600}}>{user.name}</span><span style={{fontSize:10,color:'var(--text2)',fontFamily:'var(--mono)'}}>{RI[user.role]} {user.role}</span></div>
-          <button className="logout" style={{borderColor:themeModal?'var(--teal)':'',color:themeModal?'var(--teal)':''}} onClick={()=>setThemeModal(p=>!p)}>🎨 {theme}</button>
-          <button className="logout" style={{borderColor:settingsModal?'var(--gold)':'',color:settingsModal?'var(--gold)':''}} onClick={()=>setSettingsModal(true)}>⚙ Ayarlar</button>
-          <button className="logout" onClick={()=>{setUser(null);localStorage.removeItem('rv_user');}}>Çıkış ↗</button>
+
+        <div className="sidebar-footer">
+          <div className="user-card">
+            <div className="user-avatar" style={{ background: user.color + '22', color: user.color }}>{user.av}</div>
+            <div className="user-info">
+              <div className="uname">{user.name}</div>
+              <div className="urole">{RI[user.role]} {user.role}</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 5, marginTop: 8 }}>
+            <button className="btn btn-sm" style={{ flex: 1 }} onClick={() => setThemeModal(p => !p)} title="Tema">🎨</button>
+            <button className="btn btn-sm" style={{ flex: 1 }} onClick={() => setSettingsModal(true)} title="Ayarlar">⚙</button>
+            <button className="btn btn-sm btn-danger" style={{ flex: 1 }}
+              onClick={() => { setUser(null); localStorage.removeItem('rv_user'); }} title="Çıkış">↗</button>
+          </div>
         </div>
       </div>
-      <div className="pbar">
-        <span style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--mono)',fontWeight:600,letterSpacing:'.08em',textTransform:'uppercase'}}>YETKİLER:</span>
-        {perms.map((p,i)=><span key={i} className={`ptag ${p.g?'ptg':'ptr'}`}>{p.l}</span>)}
+
+      {/* ── MAIN ── */}
+      <div className="main-area">
+        {/* Topbar */}
+        <div className="topbar">
+          <button className="menu-toggle" onClick={e => { e.stopPropagation(); setSidebarOpen(p => !p); }}>☰</button>
+          <span className="page-title">{activeLabel}</span>
+          <div className="topbar-right">
+            {dbSync && <div className="topbar-pill"><div className="live-dot" />Senkronize ediliyor</div>}
+            <div className="topbar-pill" style={{ cursor: 'default' }}>
+              <div className="live-dot" /><span>CANLI</span>
+            </div>
+            <div className="topbar-pill" style={{ cursor: 'default' }}>
+              <span style={{ color: 'var(--gold)', fontWeight: 700 }}>€{(hT / 1e6).toFixed(1)}M</span>
+              <span style={{ color: 'var(--text3)' }}>Hedef</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="page-content">
+          {tab === 'dash' && <Dashboard user={user} monthly={monthly} simOcc={simOcc} setSimOcc={setSimOccSync} simAdr={simAdr} setSimAdr={setSimAdrSync} saveSimToDB={saveSimToDB} />}
+          {tab === 'acente' && <Acente user={user} ac={ac} setAc={setAcSync} />}
+          {tab === 'proj' && <Projeksiyon simOcc={simOcc} simAdr={simAdr} monthly={monthly} />}
+          {tab === 'analiz' && <Analiz monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr} />}
+          {tab === 'satis' && <Satis user={user} ac={ac} monthly={monthly} simOcc={simOcc} simAdr={simAdr} />}
+          {tab === 'operasyon' && <Operasyonel user={user} monthly={monthly} simOcc={simOcc} simAdr={simAdr} />}
+          {tab === 'bildirim' && <Bildirim user={user} monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr} />}
+          {tab === 'raporlama' && <Raporlama user={user} monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr} />}
+          {tab === 'zeka' && <ZekaMerkezi user={user} monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr} setSimAdr={setSimAdrSync} setSimOcc={setSimOccSync} />}
+          {tab === 'editor' && <HedefEditor user={user} monthly={monthly} setMonthly={setMonthlySync} ac={ac} setAc={setAcSync} />}
+          {tab === 'ai' && <AIAsistan user={user} monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr} groqKey={groqKey} />}
+          {tab === 'users' && <KullaniciYonetimi user={user} users={users} saveUser={saveUser} deleteUser={deleteUser} sbReady={sbReady} />}
+        </div>
       </div>
-      {/* ── GROUPED NAV ── */}
-      <div className="tabs" style={{position:'relative',zIndex:200}} onClick={()=>setNavOpen(null)}>
-        {NAV_GROUPS.map(g=>{
-          // Kritik badge hesabı
-          const hT2=monthly.reduce((a,b)=>a+b.h,0);
-          const gT2=monthly.filter(m=>m.g!=null).reduce((a,b)=>a+b.g,0);
-          const pct2=gT2/hT2*100;
-          const hasCrit=(g.items||[]).some(it=>it.id==='bildirim')
-            ? (pct2<70?1:0)+ac.filter(a=>a.ciro/a.hedef*100<50).length : 0;
-          const groupActive = g.single ? tab===g.tab : (g.items||[]).some(it=>it.id===tab);
-          const isOpen = navOpen===g.id;
 
-          if(g.single) return(
-            <button key={g.id}
-              className={`tab${groupActive?' act':''}${!g.ok?' lkd':''}`}
-              onClick={e=>{e.stopPropagation();g.ok&&setTab(g.tab);setNavOpen(null);}}
-              style={{display:'flex',alignItems:'center',gap:5}}>
-              {g.icon} {g.l}
-            </button>
-          );
-
-          return(
-            <div key={g.id} style={{position:'relative'}} onClick={e=>e.stopPropagation()}>
-              <button
-                className={`tab${groupActive?' act':''}`}
-                onClick={()=>setNavOpen(isOpen?null:g.id)}
-                style={{display:'flex',alignItems:'center',gap:5,position:'relative',
-                  paddingRight:g.items?.length?20:undefined}}>
-                {g.icon} {g.l}
-                <span style={{fontSize:8,opacity:0.6,position:'absolute',right:6,top:'50%',transform:'translateY(-50%) rotate('+(isOpen?'180':'0')+'deg)',transition:'transform .2s'}}>▼</span>
-                {hasCrit>0&&<span style={{position:'absolute',top:4,right:14,background:'#ef4444',color:'#fff',borderRadius:'50%',width:14,height:14,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,lineHeight:1}}>{hasCrit}</span>}
+      {/* ── TEMA MODAL ── */}
+      {themeModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 400 }} onClick={() => setThemeModal(false)}>
+          <div style={{ position: 'fixed', bottom: 80, left: 16, background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 14, padding: 12, boxShadow: 'var(--shadow-lg)', minWidth: 200, zIndex: 500 }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.08em' }}>Tema Seç</div>
+            {Object.keys(THEMES).map(name => (
+              <button key={name}
+                onClick={() => { setTheme(name); applyTheme(name); setThemeModal(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', marginBottom: 2, background: theme === name ? 'rgba(255,255,255,0.06)' : 'transparent', border: `1px solid ${theme === name ? 'var(--gold)' : 'transparent'}`, borderRadius: 8, cursor: 'pointer', textAlign: 'left' }}>
+                <div style={{ display: 'flex', gap: 3 }}>
+                  {['--gold', '--teal', '--blue', '--rose'].map(v => (
+                    <div key={v} style={{ width: 8, height: 8, borderRadius: '50%', background: THEMES[name][v] || '#888' }} />
+                  ))}
+                </div>
+                <span style={{ fontSize: 12, color: theme === name ? 'var(--gold)' : 'var(--text)', fontWeight: theme === name ? 600 : 400 }}>{name}</span>
+                {theme === name && <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--gold)' }}>✓</span>}
               </button>
-              {/* Dropdown */}
-              {isOpen&&(
-                <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,
-                  background:'var(--bg2)',border:'1px solid var(--border)',
-                  borderRadius:12,padding:'6px',minWidth:220,
-                  boxShadow:'0 12px 40px rgba(0,0,0,0.4)',zIndex:300}}>
-                  <div style={{fontSize:9,color:'var(--text3)',fontFamily:'var(--mono)',
-                    textTransform:'uppercase',letterSpacing:'.08em',padding:'4px 10px 8px',
-                    borderBottom:'1px solid var(--border)',marginBottom:4}}>
-                    {g.l}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── AYARLAR MODAL ── */}
+      {settingsModal && (
+        <div className="overlay" onClick={() => setSettingsModal(false)}>
+          <div className="modal" style={{ width: 480 }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setSettingsModal(false)}
+              style={{ position: 'absolute', top: 14, right: 14, background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 20 }}>×</button>
+            <div className="modal-title">⚙ Ayarlar</div>
+            <div className="modal-sub">Supabase, Groq API ve entegrasyonlar</div>
+
+            {/* Supabase */}
+            <div style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>🗄 Supabase</div>
+                <span className={`badge ${sbReady ? 'badge-green' : 'badge-red'}`}>{sbReady ? 'Bağlı' : 'Bağlı Değil'}</span>
+              </div>
+              {sbReady ? (
+                <div>
+                  <div className="notif notif-success" style={{ marginBottom: 10 }}>Bağlantı aktif. Veriler bulutta saklanıyor.</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn btn-sm" style={{ flex: 1 }} onClick={loadFromDB} disabled={dbSync}>{dbSync ? '⏳' : '🔄 Yenile'}</button>
+                    <button className="btn btn-sm btn-danger" style={{ flex: 1 }} onClick={disconnectDB}>Bağlantıyı Kes</button>
                   </div>
-                  {(g.items||[]).map(it=>{
-                    const isAct = tab===it.id;
-                    const locked = !it.ok;
-                    return(
-                      <button key={it.id}
-                        onClick={()=>{ if(!locked){setTab(it.id);setNavOpen(null);} }}
-                        style={{display:'flex',alignItems:'flex-start',gap:10,width:'100%',
-                          padding:'8px 10px',marginBottom:2,borderRadius:8,cursor:locked?'not-allowed':'pointer',
-                          background:isAct?'rgba(255,255,255,0.06)':'transparent',
-                          border:`1px solid ${isAct?'var(--gold)':'transparent'}`,
-                          textAlign:'left',transition:'all .12s',opacity:locked?0.45:1}}
-                        onMouseOver={e=>{if(!locked&&!isAct)e.currentTarget.style.background='rgba(255,255,255,0.04)';}}
-                        onMouseOut={e=>{if(!isAct)e.currentTarget.style.background='transparent';}}>
-                        <span style={{fontSize:16,flexShrink:0,marginTop:1}}>{it.icon}</span>
-                        <div>
-                          <div style={{fontSize:12,fontWeight:isAct?700:500,
-                            color:isAct?'var(--gold)':'var(--text)',display:'flex',alignItems:'center',gap:6}}>
-                            {it.l}
-                            {locked&&<span style={{fontSize:9,color:'var(--text3)'}}>🔒</span>}
-                            {isAct&&<span style={{fontSize:9,color:'var(--gold)'}}>✓</span>}
-                          </div>
-                          <div style={{fontSize:10,color:'var(--text3)',marginTop:1,lineHeight:1.4}}>{it.desc}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                </div>
+              ) : (
+                <div>
+                  <div className="field"><label>Project URL</label><input className="inp" value={sbCfg.url} onChange={e => setSbCfg({ ...sbCfg, url: e.target.value })} placeholder="https://xxx.supabase.co" style={{ fontSize: 12, fontFamily: 'var(--mono)' }} /></div>
+                  <div className="field"><label>Anon Key</label><input className="inp" type="password" value={sbCfg.key} onChange={e => setSbCfg({ ...sbCfg, key: e.target.value })} placeholder="eyJhbGci..." style={{ fontSize: 12, fontFamily: 'var(--mono)' }} /></div>
+                  {sbStatus === 'error' && <div className="notif notif-error" style={{ marginBottom: 8 }}>❌ Bağlantı hatası. Bilgileri kontrol edin.</div>}
+                  <button className="btn btn-primary btn-full" onClick={testConnection} disabled={!sbCfg.url || !sbCfg.key || sbStatus === 'connecting'}>
+                    {sbStatus === 'connecting' ? '⏳ Bağlanıyor…' : 'Bağlan'}
+                  </button>
                 </div>
               )}
             </div>
-          );
-        })}
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:7}}>
-          <span style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--mono)',fontWeight:600,letterSpacing:'.06em',textTransform:'uppercase'}}>YIL HEDEFİ</span>
-          <span style={{fontSize:15,fontWeight:700,fontFamily:'var(--ff)',color:'var(--gold)'}}>€{(hT/1e6).toFixed(1)}M</span>
-        </div>
-      </div>
-      <div className="main">
-        {/* Breadcrumb */}
-        {tab!=='dash'&&(()=>{
-          const group=NAV_GROUPS.find(g=>g.items&&g.items.some(it=>it.id===tab));
-          const item=group&&group.items.find(it=>it.id===tab);
-          if(!group||!item) return null;
-          return(
-            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:16,
-              padding:'6px 12px',background:'rgba(255,255,255,0.03)',borderRadius:8,
-              border:'1px solid var(--border)',width:'fit-content'}}>
-              <span style={{fontSize:11,color:'var(--text3)'}}>{group.icon} {group.l}</span>
-              <span style={{fontSize:10,color:'var(--text3)',opacity:0.5}}>›</span>
-              <span style={{fontSize:11,fontWeight:600,color:'var(--gold)'}}>{item.icon} {item.l}</span>
-            </div>
-          );
-        })()}
-        {tab==='dash'&&<Dashboard user={user} monthly={monthly} simOcc={simOcc} setSimOcc={setSimOccSync} simAdr={simAdr} setSimAdr={setSimAdrSync} saveSimToDB={saveSimToDB}/>}
-        {tab==='acente'&&<Acente user={user} ac={ac} setAc={setAcSync}/>}
-        {tab==='proj'&&<Projeksiyon simOcc={simOcc} simAdr={simAdr} monthly={monthly}/>}
-        {tab==='analiz'&&<Analiz monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr}/>}
-        {tab==='satis'&&<Satis user={user} ac={ac} monthly={monthly} simOcc={simOcc} simAdr={simAdr}/>}
-        {tab==='operasyon'&&<Operasyonel user={user} monthly={monthly} simOcc={simOcc} simAdr={simAdr}/>}
-        {tab==='bildirim'&&<Bildirim user={user} monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr}/>}
-        {tab==='raporlama'&&<Raporlama user={user} monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr}/>}
-        {tab==='zeka'&&<ZekaMerkezi user={user} monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr} setSimAdr={setSimAdrSync} setSimOcc={setSimOccSync}/>}
-        {tab==='editor'&&<HedefEditor user={user} monthly={monthly} setMonthly={setMonthlySync} ac={ac} setAc={setAcSync}/>}
-        {tab==='ai'&&<AIAsistan user={user} monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr} groqKey={groqKey}/>}
-        {tab==='users'&&<KullaniciYonetimi user={user} users={users} saveUser={saveUser} deleteUser={deleteUser} sbReady={sbReady}/>}
-      </div>
 
-      {themeModal&&(
-        <div style={{position:'fixed',top:62,right:16,zIndex:500,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:14,padding:'12px',boxShadow:'0 8px 40px rgba(0,0,0,0.6)',minWidth:220}}
-          onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--mono)',marginBottom:10,textTransform:'uppercase',letterSpacing:'.08em'}}>Tema Seç</div>
-          {Object.keys(THEMES).map(name=>(
-            <button key={name} onClick={()=>{setTheme(name);applyTheme(name);setThemeModal(false);}}
-              style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'8px 12px',marginBottom:4,
-                background:theme===name?'rgba(255,255,255,0.06)':'transparent',
-                border:`1px solid ${theme===name?'var(--gold)':'transparent'}`,
-                borderRadius:8,cursor:'pointer',textAlign:'left',transition:'all .15s'}}>
-              <div style={{display:'flex',gap:3}}>
-                {['--gold','--teal','--blue','--rose'].map(v=>(
-                  <div key={v} style={{width:8,height:8,borderRadius:'50%',
-                    background:THEMES[name][v]||'#888'}}/>
-                ))}
+            {/* Groq */}
+            <div style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>🤖 Groq API</div>
+                <span className={`badge ${groqSaved ? 'badge-green' : 'badge-red'}`}>{groqSaved ? 'Aktif' : 'Bağlı Değil'}</span>
               </div>
-              <span style={{fontSize:12,color:theme===name?'var(--gold)':'var(--text)',fontWeight:theme===name?600:400}}>{name}</span>
-              {theme===name&&<span style={{marginLeft:'auto',fontSize:10,color:'var(--gold)'}}>✓</span>}
-            </button>
-          ))}
-          <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid var(--border)',fontSize:10,color:'var(--text3)',fontFamily:'var(--mono)',textAlign:'center'}}>
-            Tercih tarayıcıda saklanır
-          </div>
-        </div>
-      )}
-
-      {settingsModal&&(
-        <div className="overlay" onClick={()=>setSettingsModal(false)}>
-          <div className="modal" style={{width:500}} onClick={e=>e.stopPropagation()}>
-            <button onClick={()=>setSettingsModal(false)} style={{position:'absolute',top:14,right:14,background:'rgba(255,255,255,0.05)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text2)',cursor:'pointer',padding:'3px 8px',fontSize:13}}>✕</button>
-
-            <div style={{fontFamily:'var(--ff)',fontSize:16,fontWeight:700,marginBottom:20}}>⚙ Ayarlar & Entegrasyonlar</div>
-
-            <div style={{display:'flex',flexDirection:'column',gap:3,marginBottom:22}}>
-
-              <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',borderRadius:12,padding:'16px'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{width:28,height:28,background:'rgba(6,214,160,0.12)',border:'1px solid rgba(6,214,160,0.25)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}>🗄</div>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600}}>Supabase</div>
-                      <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--mono)'}}>Bulut veritabanı</div>
-                    </div>
-                  </div>
-                  <span style={{fontSize:10,fontFamily:'var(--mono)',padding:'3px 8px',borderRadius:6,background:sbReady?'var(--teal-dim)':'rgba(255,255,255,0.05)',border:`1px solid ${sbReady?'rgba(6,214,160,0.25)':'var(--border)'}`,color:sbReady?'var(--teal)':'var(--text3)'}}>{sbReady?'✓ Bağlı':'Bağlı değil'}</span>
+              {groqSaved ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ flex: 1, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>gsk_•••••••••••••••••</div>
+                  <button className="btn btn-sm btn-danger" onClick={deleteGroqKey} disabled={!sbReady}>Sil</button>
                 </div>
-                {sbReady?(
-                  <div>
-                    <div style={{fontSize:11,color:'var(--text2)',fontFamily:'var(--mono)',marginBottom:10,background:'rgba(0,0,0,0.2)',borderRadius:8,padding:'8px 10px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                      <span>{((SUPABASE_URL&&SUPABASE_URL.trim())||localStorage.getItem('sb_url')||'').replace('https://','').split('.supabase')[0]}.supabase.co</span>
-                      {SUPABASE_URL&&SUPABASE_URL.trim()&&<span style={{fontSize:9,padding:'2px 6px',background:'rgba(6,214,160,0.1)',border:'1px solid rgba(6,214,160,0.3)',borderRadius:4,color:'var(--teal)'}}>Sabit config</span>}
-                    </div>
-                    <div style={{display:'flex',gap:8}}>
-                      <button className="btn bg" style={{flex:1,fontSize:11}} onClick={loadFromDB} disabled={dbSync}>🔄 Veriyi Yenile</button>
-                      <button className="btn" style={{flex:1,fontSize:11,background:'var(--rose-dim)',border:'1px solid rgba(247,37,133,.3)',color:'#ff6eb4'}} onClick={()=>{disconnectDB();}}>Bağlantıyı Kes</button>
-                    </div>
+              ) : (
+                <div>
+                  <div className="field">
+                    <label>API Key — <a href="https://console.groq.com/keys" target="_blank" style={{ color: 'var(--gold)', textDecoration: 'none' }}>console.groq.com ↗</a></label>
+                    <input className="inp" type="password" value={groqKeyInput} onChange={e => setGroqKeyInput(e.target.value)} placeholder="gsk_..." style={{ fontSize: 12, fontFamily: 'var(--mono)' }} />
                   </div>
-                ):(
-                  <div>
-                    <div className="mg" style={{marginBottom:10}}>
-                      <label className="lbl">Project URL</label>
-                      <input className="inp" value={sbCfg.url} onChange={e=>setSbCfg({...sbCfg,url:e.target.value})} placeholder="https://xxxxxxxxxxxx.supabase.co" style={{fontFamily:'var(--mono)',fontSize:11}} onChange={e=>setSbCfg({...sbCfg,url:e.target.value.trim()})}/>
-                    </div>
-                    <div style={{marginBottom:12}}>
-                      <label className="lbl">Anon Key</label>
-                      <input className="inp" type="password" value={sbCfg.key} onChange={e=>setSbCfg({...sbCfg,key:e.target.value})} placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…" style={{fontFamily:'var(--mono)',fontSize:11}}/>
-                    </div>
-                    {sbStatus==='error'&&<div style={{fontSize:11,color:'#ff6eb4',marginBottom:8,fontFamily:'var(--mono)'}}>❌ Bağlantı hatası. Bilgileri kontrol edin.</div>}
-                    <button className="btn bp" style={{width:'100%'}} onClick={testConnection} disabled={!sbCfg.url||!sbCfg.key||sbStatus==='connecting'}>
-                      {sbStatus==='connecting'?'⏳ Bağlanıyor…':'🔌 Bağlan'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',borderRadius:12,padding:'16px',marginTop:8}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{width:28,height:28,background:'rgba(240,180,41,0.12)',border:'1px solid rgba(240,180,41,0.25)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}>🤖</div>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600}}>Groq API</div>
-                      <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--mono)'}}>Llama 3.3 · AI Asistan</div>
-                    </div>
-                  </div>
-                  <span style={{fontSize:10,fontFamily:'var(--mono)',padding:'3px 8px',borderRadius:6,background:groqSaved?'var(--gold-dim)':'rgba(255,255,255,0.05)',border:`1px solid ${groqSaved?'rgba(240,180,41,0.3)':'var(--border)'}`,color:groqSaved?'var(--gold2)':'var(--text3)'}}>{groqSaved?'✓ Aktif':'Bağlı değil'}</span>
+                  {!sbReady && <div className="notif notif-warn" style={{ marginBottom: 8 }}>Önce Supabase bağlantısı gerekli.</div>}
+                  <button className="btn btn-primary btn-full" onClick={() => saveGroqKey(groqKeyInput.trim())} disabled={!groqKeyInput.trim() || !sbReady}>Kaydet</button>
                 </div>
-                {groqSaved?(
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{flex:1,fontSize:11,color:'var(--text2)',fontFamily:'var(--mono)',background:'rgba(0,0,0,0.2)',borderRadius:8,padding:'8px 10px'}}>gsk_••••••••••••••••••••••••••••••</div>
-                    <button className="btn" style={{fontSize:11,background:'var(--rose-dim)',border:'1px solid rgba(247,37,133,.3)',color:'#ff6eb4',padding:'7px 12px'}} onClick={deleteGroqKey} disabled={!sbReady}>Sil</button>
-                  </div>
-                ):(
-                  <div>
-                    <div style={{marginBottom:10}}>
-                      <label className="lbl">API Key — <a href="https://console.groq.com/keys" target="_blank" style={{color:'var(--gold)',textDecoration:'none',fontWeight:400}}>console.groq.com/keys ↗</a></label>
-                      <input className="inp" type="password" value={groqKeyInput} onChange={e=>setGroqKeyInput(e.target.value)} placeholder="gsk_••••••••••••••••••••••••••••••••" style={{fontFamily:'var(--mono)',fontSize:11}}/>
-                    </div>
-                    {!sbReady&&<div style={{fontSize:11,color:'var(--gold)',fontFamily:'var(--mono)',marginBottom:8}}>⚠ Önce Supabase'e bağlanın</div>}
-                    <button className="btn bp" style={{width:'100%'}} onClick={()=>saveGroqKey(groqKeyInput.trim())} disabled={!groqKeyInput.trim()||!sbReady}>
-                      💾 Kaydet
-                    </button>
-                  </div>
-                )}
-              </div>
-
+              )}
             </div>
 
-            <button className="btn bg" style={{width:'100%'}} onClick={()=>setSettingsModal(false)}>Kapat</button>
-          </div>
-        </div>
-      )}
-
-      {sbModal&&(
-        <div className="overlay" onClick={()=>setSbModal(false)}>
-          <div className="modal" style={{width:480}} onClick={e=>e.stopPropagation()}>
-            <button onClick={()=>setSbModal(false)} style={{position:'absolute',top:14,right:14,background:'rgba(255,255,255,0.05)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text2)',cursor:'pointer',padding:'3px 8px',fontSize:13}}>✕</button>
-            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20}}>
-              <div style={{width:36,height:36,background:'linear-gradient(135deg,rgba(6,214,160,0.2),rgba(76,201,240,0.15))',border:'1px solid rgba(6,214,160,0.3)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🗄</div>
-              <div>
-                <div style={{fontFamily:'var(--ff)',fontSize:15,fontWeight:700}}>Supabase Bağlantısı</div>
-                <div style={{fontSize:11,color:'var(--text2)',fontFamily:'var(--mono)',marginTop:2}}>Verileri bulut veritabanında sakla</div>
-              </div>
-            </div>
-
-            {sbReady?(
-              <div>
-                <div style={{background:'var(--teal-dim)',border:'1px solid rgba(6,214,160,0.25)',borderRadius:10,padding:'12px 14px',marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
-                  <span style={{fontSize:18}}>✅</span>
-                  <div>
-                    <div style={{fontSize:12,fontWeight:600,color:'var(--teal)'}}>Bağlantı aktif</div>
-                    <div style={{fontSize:10,color:'var(--text2)',fontFamily:'var(--mono)',marginTop:2}}>{((SUPABASE_URL&&SUPABASE_URL.trim())||localStorage.getItem('sb_url')||'').replace('https://','').split('.')[0]}…supabase.co</div>
-                  </div>
-                  <button className="btn bg" style={{marginLeft:'auto',fontSize:11,padding:'5px 12px'}} onClick={loadFromDB} disabled={dbSync}>{dbSync?'⏳ Yükleniyor…':'🔄 Yenile'}</button>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
-                  {[['📅 Aylık Hedefler',monthly.length+' kayıt'],['🏢 Acenteler',ac.length+' kayıt'],['☁️ Otomatik Sync','Aktif'],['🔒 Güvenli','RLS korumalı']].map(([l,v],i)=>(
-                    <div key={i} style={{background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px'}}>
-                      <div style={{fontSize:10,color:'var(--text2)',fontFamily:'var(--mono)',marginBottom:3}}>{l}</div>
-                      <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{display:'flex',gap:8}}>
-                  <button className="btn bg" style={{flex:1}} onClick={()=>setSbModal(false)}>Kapat</button>
-                  <button className="btn" style={{flex:1,background:'var(--rose-dim)',border:'1px solid rgba(247,37,133,.3)',color:'#ff6eb4'}} onClick={disconnectDB}>Bağlantıyı Kes</button>
-                </div>
-              </div>
-            ):(
-              <div>
-                <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',marginBottom:16,fontSize:12,color:'var(--text2)',lineHeight:1.8}}>
-                  <div style={{fontWeight:600,color:'var(--text)',marginBottom:6}}>📋 Kurulum Adımları</div>
-                  <div>1. <a href="https://supabase.com" target="_blank" style={{color:'var(--gold)',textDecoration:'none'}}>supabase.com</a>'da ücretsiz proje oluştur</div>
-                  <div>2. SQL editöründe aşağıdaki şemayı çalıştır</div>
-                  <div>3. Project URL ve anon key'i buraya gir</div>
-                </div>
-
-                <div style={{background:'rgba(0,0,0,0.3)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',marginBottom:16,fontFamily:'var(--mono)',fontSize:10,color:'var(--teal)',lineHeight:1.9,overflowX:'auto',whiteSpace:'pre'}}>
-{`create table monthly_targets (
-  month_index int primary key,
-  month_name  text,
-  target      bigint,
-  actual      bigint,
-  occ_target  numeric,
-  adr_target  numeric
-);
-
-create table agencies (
-  id             serial primary key,
-  name           text unique,
-  type           text,
-  commission     numeric,
-  annual_target  bigint,
-  actual_revenue bigint default 0,
-  discount       numeric default 0
-);
-
-create table agency_monthly (
-  agency_id   int references agencies(id) on delete cascade,
-  month_index int,
-  target      bigint,
-  primary key (agency_id, month_index)
-);`}
-                </div>
-
-                <div className="mg">
-                  <label className="lbl">Project URL</label>
-                  <input className="inp" value={sbCfg.url} onChange={e=>setSbCfg({...sbCfg,url:e.target.value})} placeholder="https://xxxxxxxxxxxx.supabase.co" style={{fontFamily:'var(--mono)',fontSize:12}} onChange={e=>setSbCfg({...sbCfg,url:e.target.value.trim()})}/>
-                </div>
-                <div className="mg">
-                  <label className="lbl">Anon Key (public)</label>
-                  <input className="inp" type="password" value={sbCfg.key} onChange={e=>setSbCfg({...sbCfg,key:e.target.value})} placeholder="eyJhbGciOiJIUzI1NiIsInR5c…" style={{fontFamily:'var(--mono)',fontSize:12}}/>
-                </div>
-
-                {sbStatus==='error'&&<div className="notif" style={{background:'var(--rose-dim)',border:'1px solid rgba(247,37,133,.3)',color:'#ff6eb4',marginBottom:12}}>❌ Bağlantı kurulamadı. URL ve key'i kontrol edin.</div>}
-                {sbStatus==='connecting'&&<div className="notif nb" style={{marginBottom:12}}>⏳ Bağlanılıyor…</div>}
-
-                <div style={{display:'flex',gap:8}}>
-                  <button className="btn bg" style={{flex:1}} onClick={()=>setSbModal(false)}>İptal</button>
-                  <button className="btn bp" style={{flex:2}} onClick={testConnection} disabled={!sbCfg.url||!sbCfg.key||sbStatus==='connecting'}>
-                    {sbStatus==='connecting'?'⏳ Test ediliyor…':'🔌 Bağlan & Senkronize Et'}
-                  </button>
-                </div>
-              </div>
-            )}
+            <button className="btn btn-full" style={{ marginTop: 4 }} onClick={() => setSettingsModal(false)}>Kapat</button>
           </div>
         </div>
       )}
     </div>
   );
 }
+
 export default App;
