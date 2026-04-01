@@ -234,17 +234,38 @@ const GLOBAL_STYLE = `
 
   /* MOBILE */
   @media(max-width:768px){
-    .sidebar { transform:translateX(-100%); width:260px; }
+    .sidebar { transform:translateX(-100%); width:260px; position:fixed; height:100vh; z-index:200; }
     .sidebar.open { transform:translateX(0); box-shadow:var(--shadow-lg); }
     .main-area { margin-left:0; }
     .kpi-grid { grid-template-columns:repeat(2,1fr); }
     .g65, .g2, .g3 { grid-template-columns:1fr; }
     .mgrid { grid-template-columns:repeat(6,1fr); }
-    .topbar { padding:0 16px; }
-    .page-content { padding:16px; }
+    .topbar { padding:0 12px; }
+    .page-content, .main { padding:14px 12px !important; }
     .menu-toggle { display:flex !important; }
+    .kgrid { grid-template-columns:repeat(2,1fr) !important; gap:8px !important; }
+    .panel { padding:14px !important; }
+    table.tbl { display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .aigrid { grid-template-columns:1fr !important; }
+    .overlay { align-items:flex-end; padding:0; }
+    .modal { width:100% !important; max-width:100% !important; max-height:88vh; border-radius:20px 20px 0 0 !important; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:24px 16px 32px; }
+    .savebar { width:calc(100% - 24px) !important; bottom:16px !important; }
+  }
+  @media(max-width:480px){
+    .kcard { padding:12px 10px !important; }
+    .kval { font-size:16px !important; }
+    .mgrid { grid-template-columns:repeat(4,1fr) !important; }
+    .tbl td { font-size:11px !important; padding:8px 6px !important; }
+    .tbl th { font-size:9px !important; padding:6px !important; }
+    .inp { font-size:16px !important; } /* iOS zoom önle */
+  }
+  @media(hover:none) and (pointer:coarse){
+    .btn, .tab, .nav-item { min-height:44px; }
+    .slider::-webkit-slider-thumb { width:22px !important; height:22px !important; }
   }
   .menu-toggle { display:none; align-items:center; justify-content:center; width:36px; height:36px; border-radius:var(--radius-sm); background:var(--bg3); border:1px solid var(--border); cursor:pointer; flex-shrink:0; font-size:18px; color:var(--text); }
+  .sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:199; backdrop-filter:blur(4px); }
+  @media(max-width:768px){ .sidebar-overlay.open { display:block !important; } }
 
   /* LIGHT THEME */
   .light-theme { --bg:#f1f5f9; --bg2:#ffffff; --bg3:#f8fafc; --border:rgba(0,0,0,.08); --border2:rgba(0,0,0,.15); --text:#0f172a; --text2:#334155; --text3:#94a3b8; }
@@ -684,6 +705,7 @@ function App() {
     <div className="app-shell" onClick={() => setSidebarOpen(false)}>
 
       {/* ── SIDEBAR ── */}
+      {sidebarOpen && <div className={`sidebar-overlay${sidebarOpen?' open':''}`} onClick={()=>setSidebarOpen(false)}/>}
       <div className={`sidebar${sidebarOpen ? ' open' : ''}`} onClick={e => e.stopPropagation()}>
         <div className="sidebar-logo">
           <div className="wordmark">Revenue<em>OS</em></div>
