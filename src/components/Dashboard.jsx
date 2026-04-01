@@ -4,7 +4,7 @@ import { fmt, fmtK } from '../utils/format';
 import { MF } from '../data/constants';
 
 function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB,
-  elektraReady,elektraStatus,elektraLastSync,elektraSyncing,onElektraSync,elektraWorkerUrl}){
+  elektraReady,elektraStatus,elektraLastSync,elektraSyncing,onElektraSync,elektraWorkerUrl,elektraMonthsCache}){
   const WORKER_URL = elektraWorkerUrl || 'https://elektra-proxy.noxinn-presentation.workers.dev';
   const [simMode,setSimMode]=useState('Oda Başı');
   const [simPP,setSimPP]=useState(95);
@@ -28,6 +28,13 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB,
       return saved ? JSON.parse(saved) : {};
     } catch { return {}; }
   }); // {year: months[]}
+
+  // App'ten gelen cache güncellenince state'i de güncelle
+  React.useEffect(() => {
+    if (elektraMonthsCache && Object.keys(elektraMonthsCache).length > 0) {
+      setElektraYearData(prev => ({ ...prev, ...elektraMonthsCache }));
+    }
+  }, [elektraMonthsCache]);
   const [elektraLoading, setElektraLoading] = useState(false);
 
   const MFull = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
