@@ -233,6 +233,12 @@ const GLOBAL_STYLE = `
   .chat-msg-user { background:var(--gold-dim); border:1px solid rgba(245,166,35,.2); border-radius:12px 12px 3px 12px; padding:12px 14px; font-size:13px; text-align:right; }
 
   /* MOBILE */
+  /* Safe area — iPhone notch/home bar */
+  .app-shell { padding-top: env(safe-area-inset-top); }
+  .topbar { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  .savebar { bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px)) !important; }
+  .modal { padding-bottom: max(32px, calc(env(safe-area-inset-bottom) + 16px)) !important; }
+
   @media(max-width:768px){
     .sidebar { transform:translateX(-100%); width:260px; position:fixed; height:100vh; z-index:200; }
     .sidebar.open { transform:translateX(0); box-shadow:var(--shadow-lg); }
