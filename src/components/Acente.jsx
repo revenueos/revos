@@ -94,14 +94,14 @@ function Acente({user,ac,setAc}){
           const { data: existing } = await sb.from('agencies').select('id').eq('name', ea.name).single();
           if (existing) {
             await sb.from('agencies').update({
-              actual_revenue: ciro, annual_target: item.hedef,
+              actual_revenue: ciro, annual_target: item.hedef, pp_eur: ea.avgPP || null, adr_eur: ea.avgADR || null,
             }).eq('id', existing.id);
             await sb.from('agency_monthly').delete().eq('agency_id', existing.id);
             await sb.from('agency_monthly').insert(aylar.map((t,i)=>({agency_id: existing.id, month_index: i, target: t})));
           } else {
             const { data: saved } = await sb.from('agencies').insert({
               name: ea.name, type: tip, commission: 15,
-              annual_target: item.hedef, actual_revenue: ciro, discount: 5,
+              annual_target: item.hedef, actual_revenue: ciro, discount: 5, pp_eur: ea.avgPP || null, adr_eur: ea.avgADR || null,
             }).select().single();
             if (saved) {
               await sb.from('agency_monthly').insert(aylar.map((t,i)=>({agency_id: saved.id, month_index: i, target: t})));
