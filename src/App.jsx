@@ -348,7 +348,11 @@ function App() {
   // Elektra PMS
   const [elektraToken, setElektraToken] = useState(() => localStorage.getItem('rv_elektra_token') || '');
   const [elektraHotelId, setElektraHotelId] = useState(() => localStorage.getItem('rv_elektra_hotel') || '');
-  const [elektraReady, setElektraReady] = useState(() => !!(localStorage.getItem('rv_elektra_worker') || localStorage.getItem('rv_elektra_token')));
+  // Elektra Worker URL — ayarlara girilmişse onu kullan, yoksa varsayılan
+  const ELEKTRA_WORKER_DEFAULT = 'https://elektra-proxy.noxinn-presentation.workers.dev';
+  const getElektraWorkerUrl = () => localStorage.getItem('rv_elektra_worker') || ELEKTRA_WORKER_DEFAULT;
+
+  const [elektraReady, setElektraReady] = useState(() => true); // Worker her zaman hazır
   const [elektraInput, setElektraInput] = useState('');
   const [elektraHotelInput, setElektraHotelInput] = useState('');
   const [elektraStatus, setElektraStatus] = useState('idle'); // idle | testing | ok | error
@@ -481,44 +485,25 @@ function App() {
     setElektraSyncing(true);
     setElektraStatus('testing');
     try {
-      const workerUrl = localStorage.getItem('rv_elektra_worker') || '';
+      const workerUrl = getElektraWorkerUrl();
       const year = new Date().getFullYear();
 
       let res, data;
 
-      if (workerUrl) {
-        // Cloudflare Worker proxy üzerinden
-        const q = new URLSearchParams({
-          action: 'monthly_stats',
-          token: elektraToken,
-          year,
-          ...(elektraHotelId ? { hotel: elektraHotelId } : {}),
-        });
-        res = await fetch(`${workerUrl}?${q}`);
-        data = await res.json();
-        if (!res.ok || !data.ok) {
-          setElektraStatus(res.status === 401 ? 'error_auth' : 'error');
-          setElektraSyncing(false);
-          return;
-        }
-        data = data.data; // Worker { ok, endpoint, data } döndürür
-      } else {
-        // Worker yoksa direkt dene (CORS hatası verebilir)
-        const isJWT = elektraToken.startsWith('eyJ');
-        const authHeader = isJWT
-          ? { 'Authorization': `Bearer ${elektraToken}` }
-          : { 'X-Api-Key': elektraToken };
-        res = await fetch(
-          `https://app.elektraweb.com/api/v1/reports/monthly-stats?year=${year}${elektraHotelId ? `&hotelId=${elektraHotelId}` : ''}`,
-          { headers: { 'Content-Type': 'application/json', ...authHeader } }
-        );
-        if (!res.ok) {
-          setElektraStatus(res.status === 401 ? 'error_auth' : 'cors');
-          setElektraSyncing(false);
-          return;
-        }
-        data = await res.json();
+      // Her zaman Cloudflare Worker üzerinden
+      const q = new URLSearchParams({
+        action: 'monthly_stats',
+        year,
+        ...(elektraHotelId ? { hotel: elektraHotelId } : {}),
+      });
+      res = await fetch(`${workerUrl}?${q}`);
+      data = await res.json();
+      if (!res.ok || !data.ok) {
+        setElektraStatus(res.status === 401 ? 'error_auth' : 'error');
+        setElektraSyncing(false);
+        return;
       }
+      data = data.data;
 
       // Elektra verisini RevenueOS formatına çevir — gelmeyenler 0
       const rows = data?.months || data?.data || data?.result || [];
@@ -753,7 +738,7 @@ function App() {
 
         {/* Content */}
         <div className="page-content">
-          {tab === 'dash' && <Dashboard user={user} monthly={monthly} simOcc={simOcc} setSimOcc={setSimOccSync} simAdr={simAdr} setSimAdr={setSimAdrSync} saveSimToDB={saveSimToDB} elektraReady={elektraReady} elektraStatus={elektraStatus} elektraLastSync={elektraLastSync} elektraSyncing={elektraSyncing} onElektraSync={syncFromElektra} />}
+          {tab === 'dash' && <Dashboard user={user} monthly={monthly} simOcc={simOcc} setSimOcc={setSimOccSync} simAdr={simAdr} setSimAdr={setSimAdrSync} saveSimToDB={saveSimToDB} elektraReady={elektraReady} elektraStatus={elektraStatus} elektraLastSync={elektraLastSync} elektraSyncing={elektraSyncing} onElektraSync={syncFromElektra} elektraWorkerUrl={getElektraWorkerUrl()} />}
           {tab === 'acente' && <Acente user={user} ac={ac} setAc={setAcSync} />}
           {tab === 'proj' && <Projeksiyon simOcc={simOcc} simAdr={simAdr} monthly={monthly} />}
           {tab === 'analiz' && <Analiz monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr} />}
