@@ -353,6 +353,7 @@ function App() {
   const [elektraHotelInput, setElektraHotelInput] = useState('');
   const [elektraStatus, setElektraStatus] = useState('idle'); // idle | testing | ok | error
   const [elektraSyncing, setElektraSyncing] = useState(false);
+  const [elektraLastSync, setElektraLastSync] = useState(() => localStorage.getItem('rv_elektra_last_sync') || '');
   const [users, setUsers] = useState(() => { try { const s = localStorage.getItem('rv_users'); if (s) { const p = JSON.parse(s); if (p && p.length > 0) return p; } } catch (e) {} return USERS; });
 
   // ── DB FONKSİYONLARI ── (değişmedi)
@@ -485,23 +486,25 @@ function App() {
         data = await res.json();
       }
 
-      // Elektra verisini RevenueOS formatına çevir
+      // Elektra verisini RevenueOS formatına çevir — gelmeyenler 0
       const rows = data?.months || data?.data || data?.result || [];
       if (rows.length > 0) {
         const mapped = MS.map((m, i) => {
           const row = rows.find(r => r.month === i + 1 || r.monthIndex === i);
           const existing = monthly[i];
-          if (!row) return existing;
+          if (!row) return { ...existing, m, g: 0, o: 0, a: 0 };
           return {
             ...existing,
             m,
-            // null gelirse mevcut değeri koru (örn. ciro gelmiyorsa manuel değeri silme)
-            g: row.revenue   != null ? row.revenue   : existing.g,
-            o: row.occupancy != null ? row.occupancy : existing.o,
-            a: row.adr       != null ? row.adr       : existing.a,
+            g: row.revenue   != null ? row.revenue   : 0,
+            o: row.occupancy != null ? row.occupancy : 0,
+            a: row.adr       != null ? row.adr       : 0,
           };
         });
         setMonthlySync(mapped);
+        const now = new Date().toLocaleString('tr-TR');
+        setElektraLastSync(now);
+        localStorage.setItem('rv_elektra_last_sync', now);
         setElektraStatus('ok');
       } else {
         setElektraStatus('empty');
@@ -716,7 +719,7 @@ function App() {
 
         {/* Content */}
         <div className="page-content">
-          {tab === 'dash' && <Dashboard user={user} monthly={monthly} simOcc={simOcc} setSimOcc={setSimOccSync} simAdr={simAdr} setSimAdr={setSimAdrSync} saveSimToDB={saveSimToDB} />}
+          {tab === 'dash' && <Dashboard user={user} monthly={monthly} simOcc={simOcc} setSimOcc={setSimOccSync} simAdr={simAdr} setSimAdr={setSimAdrSync} saveSimToDB={saveSimToDB} elektraReady={elektraReady} elektraStatus={elektraStatus} elektraLastSync={elektraLastSync} elektraSyncing={elektraSyncing} onElektraSync={syncFromElektra} />}
           {tab === 'acente' && <Acente user={user} ac={ac} setAc={setAcSync} />}
           {tab === 'proj' && <Projeksiyon simOcc={simOcc} simAdr={simAdr} monthly={monthly} />}
           {tab === 'analiz' && <Analiz monthly={monthly} ac={ac} simOcc={simOcc} simAdr={simAdr} />}
@@ -846,6 +849,7 @@ function App() {
                   {elektraStatus === 'ok' && (
                     <div className="notif notif-success" style={{ marginBottom: 10 }}>
                       ✅ Veriler başarıyla çekildi. Dashboard güncellendi.
+                      {elektraLastSync && <div style={{ fontSize: 10, opacity: .7, marginTop: 3 }}>Son sync: {elektraLastSync}</div>}
                     </div>
                   )}
                   {elektraStatus === 'empty' && (
