@@ -348,7 +348,7 @@ function App() {
   // Elektra PMS
   const [elektraToken, setElektraToken] = useState(() => localStorage.getItem('rv_elektra_token') || '');
   const [elektraHotelId, setElektraHotelId] = useState(() => localStorage.getItem('rv_elektra_hotel') || '');
-  const [elektraReady, setElektraReady] = useState(() => !!localStorage.getItem('rv_elektra_token'));
+  const [elektraReady, setElektraReady] = useState(() => !!(localStorage.getItem('rv_elektra_worker') || localStorage.getItem('rv_elektra_token')));
   const [elektraInput, setElektraInput] = useState('');
   const [elektraHotelInput, setElektraHotelInput] = useState('');
   const [elektraStatus, setElektraStatus] = useState('idle'); // idle | testing | ok | error
@@ -379,6 +379,18 @@ function App() {
         const gk = data.find(r => r.key === 'groq_api_key'); if (gk) { setGroqKey(gk.value); setGroqSaved(true); }
         const occ = data.find(r => r.key === 'sim_occ'); if (occ) setSimOcc(+occ.value);
         const adr = data.find(r => r.key === 'sim_adr'); if (adr) setSimAdr(+adr.value);
+        // Elektra ayarları — token Supabase'de saklanmaz, sadece Worker URL kaydedilir
+        const ew = data.find(r => r.key === 'elektra_worker');
+        const eh = data.find(r => r.key === 'elektra_hotel');
+        if (ew) {
+          localStorage.setItem('rv_elektra_worker', ew.value);
+          // Worker URL varsa bağlı say
+          setElektraReady(true);
+        }
+        if (eh) {
+          localStorage.setItem('rv_elektra_hotel', eh.value);
+          setElektraHotelId(eh.value);
+        }
       }
     } catch (e) { console.error('Settings load error:', e); }
   };
@@ -418,27 +430,49 @@ function App() {
   };
 
   // ── ELEKTRA PMS FONKSİYONLARI ──
-  const saveElektraConfig = () => {
+  const saveElektraConfig = async () => {
     const token = elektraInput.trim();
     const hotel = elektraHotelInput.trim();
+    const worker = localStorage.getItem('rv_elektra_worker') || '';
     if (!token) return;
+    // localStorage
     localStorage.setItem('rv_elektra_token', token);
     if (hotel) localStorage.setItem('rv_elektra_hotel', hotel);
     setElektraToken(token);
     setElektraHotelId(hotel);
     setElektraReady(true);
     setElektraStatus('idle');
+    // Supabase'e kaydet — token hariç (güvenlik), sadece worker URL ve hotel ID
+    if (sbReady) {
+      const sb = getSupabase();
+      if (sb) {
+        const rows = [
+          ...(hotel ? [{ key: 'elektra_hotel', value: hotel }] : []),
+          ...(worker ? [{ key: 'elektra_worker', value: worker }] : []),
+        ];
+        if (rows.length) try { await sb.from('app_settings').upsert(rows, { onConflict: 'key' }); } catch (e) { console.error(e); }
+      }
+    }
   };
 
-  const removeElektraConfig = () => {
+  const removeElektraConfig = async () => {
     localStorage.removeItem('rv_elektra_token');
     localStorage.removeItem('rv_elektra_hotel');
+    localStorage.removeItem('rv_elektra_worker');
     setElektraToken('');
     setElektraHotelId('');
     setElektraReady(false);
     setElektraInput('');
     setElektraHotelInput('');
     setElektraStatus('idle');
+    if (sbReady) {
+      const sb = getSupabase();
+      if (sb) {
+        try {
+          await sb.from('app_settings').delete().in('key', ['elektra_hotel','elektra_worker']);
+        } catch (e) {}
+      }
+    }
   };
 
   // Elektra'dan doluluk + ciro verisi çek ve RevenueOS'a yaz
@@ -876,7 +910,14 @@ function App() {
                         <label>Cloudflare Worker URL</label>
                         <input className="inp"
                           defaultValue={localStorage.getItem('rv_elektra_worker') || ''}
-                          onChange={e => localStorage.setItem('rv_elektra_worker', e.target.value.trim())}
+                          onChange={async e => {
+                            const v = e.target.value.trim();
+                            localStorage.setItem('rv_elektra_worker', v);
+                            if (sbReady && v) {
+                              const sb = getSupabase();
+                              if (sb) try { await sb.from('app_settings').upsert({ key: 'elektra_worker', value: v }, { onConflict: 'key' }); } catch {}
+                            }
+                          }}
                           placeholder="https://elektra-proxy.KULLANICI.workers.dev"
                           style={{ fontSize: 11, fontFamily: 'var(--mono)' }} />
                         <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4, lineHeight: 1.6 }}>
