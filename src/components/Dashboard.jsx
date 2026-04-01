@@ -4,7 +4,8 @@ import { fmt, fmtK } from '../utils/format';
 import { MF } from '../data/constants';
 
 function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB,
-  elektraReady,elektraStatus,elektraLastSync,elektraSyncing,onElektraSync}){
+  elektraReady,elektraStatus,elektraLastSync,elektraSyncing,onElektraSync,elektraWorkerUrl}){
+  const WORKER_URL = elektraWorkerUrl || 'https://elektra-proxy.noxinn-presentation.workers.dev';
   const [simMode,setSimMode]=useState('Oda Başı');
   const [simPP,setSimPP]=useState(95);
   const [simPax,setSimPax]=useState(2.0);
@@ -32,9 +33,8 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB,
   const MFull = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
   const loadElektraYear = async (year) => {
-    const workerUrl = localStorage.getItem('rv_elektra_worker') || '';
-    const token = localStorage.getItem('rv_elektra_token') || '';
-    if (!workerUrl || !token) return;
+    const workerUrl = WORKER_URL;
+    if (!workerUrl) return;
     if (elektraYearData[year]) { setElektraYear(year); return; }
     setElektraLoading(true);
     try {
@@ -57,7 +57,7 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB,
 
   // Elektra bağlıysa ve cache'de veri yoksa otomatik yükle
   React.useEffect(() => {
-    if (elektraReady && !elektraYearData[elektraYear] && !elektraLoading) {
+    if (elektraReady && !elektraYearData[elektraYear] && !elektraLoading && WORKER_URL) {
       loadElektraYear(elektraYear);
     }
   }, [elektraReady, elektraYear]);
@@ -226,10 +226,11 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB,
               ) : (
                 <>
                   {/* Özet KPI */}
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:14}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:14}}>
                     {[
                       {l:'Sezon Ort. OCC', v: (() => { const d=elektraMonths.filter(m=>m.occupancy>0); return d.length?`%${Math.round(d.reduce((a,b)=>a+b.occupancy,0)/d.length)}`:'-'; })(), c:'var(--teal)', icon:'🏨'},
-                      {l:'Toplam Dolu Oda', v: (() => { const t=elektraMonths.reduce((a,b)=>a+b.rooms,0); return t?t.toLocaleString('tr-TR'):'-'; })(), c:'var(--blue)', icon:'🛏'},
+                      {l:'Günlük Ort. Dolu Oda', v: (() => { const d=elektraMonths.filter(m=>m.rooms>0); return d.length?`${Math.round(d.reduce((a,b)=>a+b.rooms,0)/d.length)}/gün`:'-'; })(), c:'var(--blue)', icon:'🛏'},
+                      {l:'Toplam Konaklama', v: (() => { const t=elektraMonths.reduce((a,b)=>a+(b.rooms_total||b.rooms||0),0); return t?t.toLocaleString('tr-TR')+' gece':'-'; })(), c:'#4cc9f0', icon:'🌙'},
                       {l:'Ort. ADR', v: (() => { const d=elektraMonths.filter(m=>m.adr>0); return d.length?`€${Math.round(d.reduce((a,b)=>a+b.adr,0)/d.length)}`:'-'; })(), c:'var(--gold)', icon:'💰'},
                       {l:'Kapasite', v: (() => { const c=elektraMonths.find(m=>m.capacity>0); return c?c.capacity+' oda':'-'; })(), c:'#a78bfa', icon:'🏗'},
                     ].map((k,i)=>(
@@ -249,6 +250,7 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB,
                           <th style={{textAlign:'center',padding:'6px 8px',color:'var(--teal)',fontWeight:600,fontSize:11}}>OCC %</th>
                           <th style={{textAlign:'center',padding:'6px 8px',color:'var(--gold)',fontWeight:600,fontSize:11}}>ADR €</th>
                           <th style={{textAlign:'center',padding:'6px 8px',color:'var(--blue)',fontWeight:600,fontSize:11}}>Dolu Oda</th>
+                          <th style={{textAlign:'center',padding:'6px 8px',color:'#4cc9f0',fontWeight:600,fontSize:11}}>Toplam Konaklama</th>
                           <th style={{textAlign:'center',padding:'6px 8px',color:'#a78bfa',fontWeight:600,fontSize:11}}>Kapasite</th>
                           <th style={{textAlign:'left',padding:'6px 8px',color:'var(--text3)',fontWeight:500,fontSize:11}}>Doluluk</th>
                         </tr>
@@ -273,7 +275,10 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB,
                                 {row.adr > 0 ? `€${row.adr}` : '—'}
                               </td>
                               <td style={{textAlign:'center',padding:'8px',fontFamily:'var(--mono)',color:'var(--blue)'}}>
-                                {row.rooms > 0 ? row.rooms : '—'}
+                                {row.rooms > 0 ? `${row.rooms}/gün` : '—'}
+                              </td>
+                              <td style={{textAlign:'center',padding:'8px',fontFamily:'var(--mono)',color:'#4cc9f0'}}>
+                                {row.rooms_total > 0 ? row.rooms_total.toLocaleString('tr-TR') : '—'}
                               </td>
                               <td style={{textAlign:'center',padding:'8px',fontFamily:'var(--mono)',color:'#a78bfa'}}>
                                 {row.capacity > 0 ? row.capacity : '—'}
