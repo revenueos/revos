@@ -3,20 +3,19 @@ import { AreaChartSVG, Legend } from './Charts';
 import { fmt, fmtK } from '../utils/format';
 import { MF } from '../data/constants';
 
-function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB}){
+function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB,
+  elektraReady,elektraStatus,elektraLastSync,elektraSyncing,onElektraSync}){
   const [simMode,setSimMode]=useState('Oda Başı');
   const [simPP,setSimPP]=useState(95);
   const [simPax,setSimPax]=useState(2.0);
   const [simDirty,setSimDirty]=useState(false);
   const [origSim,setOrigSim]=useState({occ:simOcc,adr:simAdr});
   const [showPY,setShowPY]=useState(false);
-  // Sezon tarihleri
   const [sezonAcilis,setSezonAcilis]=useState(()=>localStorage.getItem('rv_sezon_acilis')||'');
   const [sezonKapanis,setSezonKapanis]=useState(()=>localStorage.getItem('rv_sezon_kapanis')||'');
   const [showSezon,setShowSezon]=useState(false);
   const effectiveAdr = simMode==='Oda Başı' ? simAdr : simPP*simPax;
 
-  // Sezon hesapları
   const sezonGun = React.useMemo(()=>{
     if(!sezonAcilis||!sezonKapanis) return 365;
     const a=new Date(sezonAcilis), k=new Date(sezonKapanis);
@@ -30,7 +29,7 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
     if(isNaN(a)||isNaN(k)||k<=a) return null;
     const aylar=[];
     for(let d=new Date(a); d<=k; d.setMonth(d.getMonth()+1)){
-      aylar.push(d.getMonth()); // 0-11
+      aylar.push(d.getMonth());
     }
     return [...new Set(aylar)];
   },[sezonAcilis,sezonKapanis]);
@@ -55,8 +54,18 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
           sim:inSezon?Math.round(totalOdaSim*(simOcc/100)*effectiveAdr*30):0};
   });
   const simT=gT+simD.filter(m=>m.sim).reduce((a,b)=>a+(b.sim||0),0);
-  // Sezon modu aktifse sezonSimT'yi öne çıkar
   const displaySimT = (sezonAcilis&&sezonKapanis) ? sezonSimT : simT;
+
+  // Elektra'dan gelen OCC verisi var mı?
+  const elektraOccData = monthly.some(m => m.o > 0);
+  const elektraAdrData = monthly.some(m => m.a > 0);
+  const avgOcc = elektraOccData
+    ? Math.round(monthly.filter(m=>m.o>0).reduce((a,b)=>a+(b.o||0),0) / monthly.filter(m=>m.o>0).length)
+    : null;
+  const avgAdr = elektraAdrData
+    ? Math.round(monthly.filter(m=>m.a>0).reduce((a,b)=>a+(b.a||0),0) / monthly.filter(m=>m.a>0).length)
+    : null;
+
   const ins=[
     pct<85?{c:'#ef4444',t:'🚨 Kritik Açık',x:`Hedefin %${pct}. ${kalan} ayda aylık ${fmtK(ayG)} ek ciro gerekiyor.`}
           :{c:'#10b981',t:'✅ Hedef Yolunda',x:`%${pct} performansla ilerliyorsunuz. ADR artışı için fırsat var.`},
@@ -64,8 +73,40 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
     {c:'#f59e0b',t:'🎯 Acente Aksiyonu',x:"Corendon hedefin %63 uzerinde. 5+ gece rezervasyonda %3 ek komisyon teklif edin."},
     {c:'#a78bfa',t:'📊 RevPAR',x:`RevPAR €${rp} | ADR €${effectiveAdr.toFixed(0)} | ${simMode==='Kişi Başı'?`PP €${simPP} × ${simPax.toFixed(1)} pax`:'Oda bazlı fiyatlama aktif'}.`},
   ];
+
   return(
     <div>
+      {/* ── ELEKTRA SYNC BAR ── */}
+      {elektraReady && (
+        <div style={{
+          display:'flex', alignItems:'center', gap:10, marginBottom:12,
+          padding:'10px 14px', borderRadius:10,
+          background:'rgba(245,166,35,0.06)', border:'1px solid rgba(245,166,35,0.2)',
+        }}>
+          <span style={{fontSize:16}}>⚡</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12, fontWeight:600, color:'var(--gold)'}}>
+              Elektra PMS {elektraStatus==='ok'?'✅ Bağlı ve Senkronize':elektraStatus==='idle'?'Hazır':'Bağlı'}
+            </div>
+            {elektraLastSync && (
+              <div style={{fontSize:10, color:'var(--text3)', fontFamily:'var(--mono)'}}>
+                Son sync: {elektraLastSync}
+                {elektraOccData && ` • OCC avg: %${avgOcc}`}
+                {elektraAdrData && ` • ADR avg: €${avgAdr}`}
+              </div>
+            )}
+          </div>
+          <button
+            style={{fontSize:11, padding:'5px 12px', borderRadius:6,
+              background:elektraSyncing?'rgba(255,255,255,0.05)':'rgba(245,166,35,0.15)',
+              border:'1px solid rgba(245,166,35,0.3)', color:'var(--gold)',
+              cursor:elektraSyncing?'not-allowed':'pointer', whiteSpace:'nowrap'}}
+            onClick={onElektraSync} disabled={elektraSyncing}>
+            {elektraSyncing ? '⏳ Senkronize…' : '🔄 Güncelle'}
+          </button>
+        </div>
+      )}
+
       <div className="aip">
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
           <div style={{width:32,height:32,background:'linear-gradient(135deg,var(--gold),var(--teal))',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>🤖</div>
@@ -78,6 +119,7 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
           {ins.map((n,i)=><div key={i} className="aicard" style={{'--ac':n.c}}><div className="t">{n.t}</div><div className="x">{n.x}</div></div>)}
         </div>
       </div>
+
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
         <button className={`btn ${showPY?'bp':'bg'}`} style={{fontSize:11,padding:'5px 14px'}}
           onClick={()=>setShowPY(p=>!p)}>
@@ -93,6 +135,8 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
           </span>
         )}
       </div>
+
+      {/* ── KPI KARTLARI ── */}
       <div className="kgrid">
         {[
           {l:'Gerçekleşen Ciro',v:fmt(gT),
@@ -122,7 +166,24 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
             {!k.py&&k.s&&<div style={{fontSize:10,color:'var(--text2)',marginTop:3}}>{k.s}</div>}
           </div>
         ))}
+
+        {/* Elektra OCC Kartı */}
+        {elektraReady && (
+          <div className="kcard" style={{'--kc':'var(--teal)'}}>
+            <div className="klbl">⚡ Ort. Doluluk (Elektra)</div>
+            <div className="kval" style={{color:'var(--teal)',fontSize:22}}>
+              {avgOcc != null ? `%${avgOcc}` : '—'}
+            </div>
+            <div className="kdelta" style={{color:'var(--teal)'}}>
+              {avgOcc != null ? 'Sezon ortalaması' : 'Sync gerekiyor'}
+            </div>
+            <div style={{fontSize:10,color:'var(--text3)',marginTop:3,fontFamily:'var(--mono)'}}>
+              {elektraAdrData ? `ADR: €${avgAdr}` : 'ADR henüz yok'}
+            </div>
+          </div>
+        )}
       </div>
+
       <div className="g65">
         <div className="panel">
           <div className="ptitle">📈 Aylık Ciro: Gerçekleşen vs Hedef vs Simülasyon</div>
@@ -137,8 +198,6 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
                 <button key={m} className={`btn ${simMode===m?'bp':'bg'}`} style={{flex:1,fontSize:11,padding:'4px 0'}} onClick={()=>setSimMode(m)}>{m}</button>
               ))}
             </div>
-
-            {/* Sezon tarihleri toggle */}
             <div style={{marginBottom:10}}>
               <button className={`btn ${showSezon?'bp':'bg'}`}
                 style={{width:'100%',fontSize:11,padding:'5px 0',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}
@@ -148,13 +207,10 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
                   : <span style={{opacity:0.6,fontSize:10}}>(365 gün — tam yıl)</span>}
                 <span style={{fontSize:9,opacity:0.7,marginLeft:2}}>{showSezon?'▲':'▼'}</span>
               </button>
-
               {showSezon&&(
-                <div style={{marginTop:8,padding:'12px',background:'rgba(255,255,255,0.03)',
-                  border:'1px solid var(--border)',borderRadius:10}}>
+                <div style={{marginTop:8,padding:'12px',background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',borderRadius:10}}>
                   <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--mono)',marginBottom:10,lineHeight:1.6}}>
-                    Sezonluk otel için açılış-kapanış tarihlerini girin.<br/>
-                    Simülasyon yalnızca bu dönem üzerinden hesaplanır.
+                    Sezonluk otel için açılış-kapanış tarihlerini girin.<br/>Simülasyon yalnızca bu dönem üzerinden hesaplanır.
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
                     <div>
@@ -168,7 +224,6 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
                         onChange={e=>{setSezonKapanis(e.target.value);localStorage.setItem('rv_sezon_kapanis',e.target.value);setSimDirty(true);}}/>
                     </div>
                   </div>
-
                   {sezonAcilis&&sezonKapanis&&sezonGun>0&&(
                     <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginBottom:8}}>
                       {[
@@ -183,11 +238,9 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
                       ))}
                     </div>
                   )}
-
-                  {/* Ay göstergesi */}
                   {sezonAylar&&(
                     <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                      {MS.map((m,i)=>{
+                      {MF.map((m,i)=>{
                         const aktif=sezonAylar.includes(i);
                         return(
                           <div key={i} style={{fontSize:10,fontFamily:'var(--mono)',padding:'2px 7px',borderRadius:4,fontWeight:aktif?700:400,
@@ -200,7 +253,6 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
                       })}
                     </div>
                   )}
-
                   {sezonAcilis&&sezonKapanis&&(
                     <button className="btn bg"
                       style={{width:'100%',fontSize:10,padding:'4px',marginTop:8,color:'#ff6eb4',borderColor:'rgba(247,37,133,0.2)'}}
@@ -253,8 +305,13 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
           </div>
         </div>
       </div>
+
+      {/* ── AYLIK KIRILIM ── */}
       <div className="panel" style={{marginBottom:18}}>
-        <div className="ptitle">📅 Aylık Kırılım</div>
+        <div className="ptitle">
+          📅 Aylık Kırılım
+          {elektraReady && <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--gold)',fontWeight:400,marginLeft:4}}>⚡ Elektra</span>}
+        </div>
         <div className="mgrid">
           {simD.map((m,i)=>{
             const val=m.gercek??m.sim;
@@ -264,23 +321,37 @@ function Dashboard({user,monthly,simOcc,setSimOcc,simAdr,setSimAdr,saveSimToDB})
             const pyVal=m.py||null;
             const pyP=pyVal&&m.hedef?(pyVal/m.hedef*100):0;
             const yoyM=pyVal&&val?((val-pyVal)/pyVal*100).toFixed(0):null;
+            const mOcc = monthly[i]?.o;
+            const mAdr = monthly[i]?.a;
+            const hasElektra = elektraReady && (mOcc > 0 || mAdr > 0);
             return(
-            <div key={i} className={`mcell${m.gercek!=null?' real':m.sim?' sim':''}`}>
-              <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--mono)',marginBottom:3,textTransform:'uppercase',letterSpacing:'.06em'}}>{m.m}</div>
-              <div style={{fontSize:13,fontWeight:700,fontFamily:'var(--ff)',color:c}}>{val?`${(val/1e6).toFixed(1)}M`:'-'}</div>
-              <div style={{fontSize:9,color:'var(--text3)',marginTop:2,fontFamily:'var(--mono)'}}>{m.gercek!=null?`Ger.%${p.toFixed(0)}`:m.sim?`Sim.%${p.toFixed(0)}`:'Bekl.'}</div>
-              {val&&<div style={{marginTop:4,height:3,background:'rgba(255,255,255,0.08)',borderRadius:2,overflow:'hidden'}}><div style={{width:`${Math.min(p,100)}%`,height:'100%',background:c}}/></div>}
-              {showPY&&pyVal&&<div style={{marginTop:4,borderTop:'1px solid rgba(255,255,255,0.06)',paddingTop:4}}>
-                <div style={{fontSize:9,color:'var(--text3)',fontFamily:'var(--mono)'}}>{`GY: ${(pyVal/1e6).toFixed(1)}M`}</div>
-                {yoyM&&<div style={{fontSize:9,fontWeight:700,color:+yoyM>=0?'var(--teal)':'#ff6eb4'}}>{+yoyM>=0?'▲':'▼'}{Math.abs(yoyM)}%</div>}
-              </div>}
-            </div>
-          );})}
+              <div key={i} className={`mcell${m.gercek!=null?' real':m.sim?' sim':''}`}
+                style={hasElektra?{border:'1px solid rgba(245,166,35,0.25)',background:'rgba(245,166,35,0.03)'}:{}}>
+                <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--mono)',marginBottom:3,textTransform:'uppercase',letterSpacing:'.06em',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  {m.m}
+                  {hasElektra && <span style={{color:'var(--gold)',fontSize:9}}>⚡</span>}
+                </div>
+                <div style={{fontSize:13,fontWeight:700,fontFamily:'var(--ff)',color:c}}>{val?`${(val/1e6).toFixed(1)}M`:'-'}</div>
+                <div style={{fontSize:9,color:'var(--text3)',marginTop:2,fontFamily:'var(--mono)'}}>{m.gercek!=null?`Ger.%${p.toFixed(0)}`:m.sim?`Sim.%${p.toFixed(0)}`:'Bekl.'}</div>
+                {val&&<div style={{marginTop:4,height:3,background:'rgba(255,255,255,0.08)',borderRadius:2,overflow:'hidden'}}><div style={{width:`${Math.min(p,100)}%`,height:'100%',background:c}}/></div>}
+                {/* Elektra OCC/ADR */}
+                {hasElektra && (
+                  <div style={{marginTop:4,paddingTop:4,borderTop:'1px solid rgba(245,166,35,0.15)'}}>
+                    {mOcc > 0 && <div style={{fontSize:9,color:'var(--gold)',fontFamily:'var(--mono)'}}>OCC %{mOcc.toFixed(0)}</div>}
+                    {mAdr > 0 && <div style={{fontSize:9,color:'var(--gold)',fontFamily:'var(--mono)'}}>ADR €{mAdr}</div>}
+                  </div>
+                )}
+                {showPY&&pyVal&&<div style={{marginTop:4,borderTop:'1px solid rgba(255,255,255,0.06)',paddingTop:4}}>
+                  <div style={{fontSize:9,color:'var(--text3)',fontFamily:'var(--mono)'}}>{`GY: ${(pyVal/1e6).toFixed(1)}M`}</div>
+                  {yoyM&&<div style={{fontSize:9,fontWeight:700,color:+yoyM>=0?'var(--teal)':'#ff6eb4'}}>{+yoyM>=0?'▲':'▼'}{Math.abs(yoyM)}%</div>}
+                </div>}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
-
 
 export default Dashboard;
